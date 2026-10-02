@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Expense Tracker</title>
+<style>
+:root{--k:#000;--w:#fff;--mut:#6b6b6b;--soft:#efefef;--red:#e03131;--blue:#1c7ed6;--green:#2f9e44}
+*{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:var(--w);color:var(--k);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,input{font:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer}
+.app{position:relative;max-width:440px;height:100%;margin:auto;display:flex;flex-direction:column;border-inline:2px solid var(--k);overflow:hidden}
+@media(max-width:440px){.app{border-inline:0}}
+header{padding:calc(14px + env(safe-area-inset-top,0px)) 20px 12px;border-bottom:2px solid var(--k);font-size:22px;font-weight:800;letter-spacing:-.01em}
+main{flex:1;overflow:auto;padding:18px 20px;display:flex;flex-direction:column;align-items:center;gap:16px}
+.chart{width:min(250px,68vw);aspect-ratio:1;flex:none}
+.chart svg{width:100%;height:100%;display:block}
+.seg{cursor:pointer}
+.pill{min-width:200px;max-width:100%;padding:10px 20px;border:2px solid var(--k);border-radius:16px;text-align:center;display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap}
+.pill i,.dot{width:12px;height:12px;border-radius:50%;flex:none;display:inline-block}
+.card{width:100%;border:2px solid var(--k);border-radius:24px;padding:14px 18px}
+.nav{display:flex;align-items:center;justify-content:space-between;font-weight:700}
+.nav button{width:36px;height:36px;border-radius:50%;font-size:22px;line-height:1}
+.nav button:disabled{opacity:.2;cursor:default}
+.tot{text-align:center;font-size:28px;font-weight:800;margin:2px 0 8px}
+.row{display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--soft);width:100%;text-align:left}
+.row span:nth-child(2){flex:1}
+.bar{display:flex;align-items:center;justify-content:space-evenly;padding:12px 20px calc(12px + env(safe-area-inset-bottom,0px));border-top:2px solid var(--k)}
+.rb{width:46px;height:46px;border:2px solid var(--k);border-radius:50%;display:grid;place-items:center}
+.rb.big{width:64px;height:64px;background:var(--k);color:var(--w)}
+.rb svg{width:55%;height:55%;stroke:currentColor;stroke-width:2.4;fill:none;stroke-linecap:round}
+.rb:active{transform:scale(.94)}
+.ov{position:absolute;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;z-index:5}
+.ov.show{display:flex}
+.sh{width:100%;max-height:85%;overflow:auto;background:var(--w);border-top:2px solid var(--k);border-radius:24px 24px 0 0;padding:20px 20px calc(20px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:14px}
+.in{width:100%;border:2px solid var(--k);border-radius:14px;padding:12px 14px;background:var(--w);outline:0}
+.in:focus{border-color:var(--blue)}
+.amt{font-size:30px;font-weight:800}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:2px solid var(--k);border-radius:99px;padding:6px 14px;display:flex;align-items:center;gap:8px}
+.chip.on{background:var(--k);color:var(--w)}
+.sw{display:flex;gap:12px}
+.sw button{width:34px;height:34px;border-radius:50%;border:2px solid var(--w);box-shadow:0 0 0 2px transparent}
+.sw button.on{box-shadow:0 0 0 2px var(--k)}
+.go{background:var(--k);color:var(--w);border-radius:14px;padding:13px;font-weight:700;width:100%}
+.x{width:32px;height:32px;border-radius:50%;font-size:22px;line-height:1;color:var(--red);flex:none}
+#hist{position:absolute;inset:0;background:var(--w);z-index:6;display:none;flex-direction:column}
+#hist.show{display:flex}
+.hh{display:flex;justify-content:space-between;align-items:center;padding:calc(12px + env(safe-area-inset-top,0px)) 20px 12px;border-bottom:2px solid var(--k);font-size:22px;font-weight:800}
+.hh .x{color:var(--k);font-size:28px}
+.tabs{display:flex;gap:8px;padding:12px 20px 4px}
+.tabs button{flex:1;border:2px solid var(--k);border-radius:99px;padding:6px;font-weight:700}
+.tabs button.on{background:var(--k);color:var(--w)}
+.hl{flex:1;overflow:auto;padding:8px 20px 20px}
+.dh{display:flex;justify-content:space-between;font-weight:800;padding:14px 0 4px}
+.it{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--soft)}
+.it .m{flex:1;min-width:0}
+.it small{color:var(--mut);display:block}
+.neg{font-weight:700}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>Expense Tracker</header>
+  <main>
+    <div class="chart" id="chart"></div>
+    <div class="pill" id="pill"></div>
+    <div class="card" id="month"></div>
+  </main>
+  <div class="bar">
+    <button class="rb" title="Add category" onclick="openCat()"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button class="rb big" title="Add expense" onclick="openExp()"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button class="rb" title="History" onclick="openHist()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/></svg></button>
+  </div>
+  <div class="ov" id="ov" onclick="if(event.target===this)closeSheet()"><div class="sh" id="sh"></div></div>
+  <div id="hist"></div>
+</div>
+
+<script>
+const K='expense-tracker-v1';
+const COLORS=['#e03131','#1c7ed6','#2f9e44','#f08c00','#000000','#868e96'];
+let S=null;
+try{S=JSON.parse(localStorage.getItem(K))}catch(e){}
+if(!S||!Array.isArray(S.cats)||!Array.isArray(S.exp))S={cats:[
+  {id:'c1',name:'Food',color:COLORS[0]},{id:'c2',name:'Travel',color:COLORS[1]},
+  {id:'c3',name:'Bills',color:COLORS[2]},{id:'c4',name:'Other',color:COLORS[5]}],exp:[]};
+const save=()=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}};
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=n=>'₹'+n.toLocaleString('en-IN',{maximumFractionDigits:2});
+const cat=id=>S.cats.find(c=>c.id===id)||{name:'Deleted',color:'#868e96'};
+const uid=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+const monthName=(y,m)=>new Date(y,m,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+const T=new Date();let vy=T.getFullYear(),vm=T.getMonth(),sel=null,hTab='d',pc=COLORS[0],pickedCat=null;
+
+function sums(list){const m={};list.forEach(e=>m[e.cat]=(m[e.cat]||0)+e.amt);
+  return Object.entries(m).map(([id,v])=>({id,v})).sort((a,b)=>b.v-a.v)}
+const inMonth=e=>{const d=new Date(e.ts);return d.getFullYear()===vy&&d.getMonth()===vm};
+
+function render(){
+  const me=S.exp.filter(inMonth),tot=me.reduce((a,e)=>a+e.amt,0),rows=sums(me);
+  if(sel&&!rows.find(r=>r.id===sel))sel=null;
+  const C=2*Math.PI*80;let acc=0,seg='';
+  rows.forEach(r=>{
+    const f=r.v/tot,gap=rows.length>1?3:0,len=Math.max(0,f*C-gap);
+    seg+=`<circle class="seg" cx="100" cy="100" r="80" fill="none" stroke="${cat(r.id).color}" stroke-width="${sel===r.id?34:26}" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-acc}" transform="rotate(-90 100 100)" opacity="${sel&&sel!==r.id?.3:1}" onclick="pick('${r.id}')"/>`;
+    acc+=f*C;
+  });
+  $('chart').innerHTML=`<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="80" fill="none" stroke="#efefef" stroke-width="26"/>${seg}<text x="100" y="107" text-anchor="middle" font-size="19" font-weight="800" fill="#000">${fmt(Math.round(tot))}</text></svg>`;
+
+  if(sel){
+    const r=rows.find(x=>x.id===sel);
+    $('pill').innerHTML=`<i style="background:${cat(sel).color}"></i>${esc(cat(sel).name)} <b>${fmt(r.v)}</b> ${Math.round(r.v/tot*100)}%`;
+  }else{
+    const ts=T.toDateString(),t=S.exp.filter(e=>new Date(e.ts).toDateString()===new Date().toDateString()).reduce((a,e)=>a+e.amt,0);
+    $('pill').innerHTML=`Today <b>${fmt(t)}</b>`;
+  }
+
+  const atNow=vy===new Date().getFullYear()&&vm===new Date().getMonth();
+  $('month').innerHTML=`<div class="nav"><button onclick="step(-1)" aria-label="Previous month">‹</button><span>${monthName(vy,vm)}</span><button onclick="step(1)" aria-label="Next month" ${atNow?'disabled':''}>›</button></div>
+    <div class="tot">${fmt(tot)}</div>`+rows.map(r=>`<button class="row" onclick="pick('${r.id}')"><i class="dot" style="background:${cat(r.id).color}"></i><span>${esc(cat(r.id).name)}</span><b>${fmt(r.v)}</b></button>`).join('');
+}
+function pick(id){sel=sel===id?null:id;render()}
+function step(d){vm+=d;if(vm<0){vm=11;vy--}if(vm>11){vm=0;vy++}sel=null;render()}
+
+/* sheets */
+function showSheet(h){$('sh').innerHTML=h;$('ov').classList.add('show')}
+function closeSheet(){$('ov').classList.remove('show')}
+
+function openExp(){
+  if(!S.cats.length){openCat();return}
+  if(!S.cats.find(c=>c.id===pickedCat))pickedCat=S.cats[0].id;
+  showSheet(`<input class="in amt" id="a" type="number" inputmode="decimal" step="any" min="0" placeholder="₹0" onkeydown="if(event.key==='Enter')addExp()">
+    <div class="chips">${S.cats.map(c=>`<button class="chip ${c.id===pickedCat?'on':''}" onclick="pickCat('${c.id}')"><i class="dot" style="background:${c.color}"></i>${esc(c.name)}</button>`).join('')}</div>
+    <input class="in" id="n" placeholder="Note" maxlength="60" onkeydown="if(event.key==='Enter')addExp()">
+    <button class="go" onclick="addExp()">Add</button>`);
+  setTimeout(()=>$('a').focus(),50);
+}
+function pickCat(id){
+  const a=$('a').value,n=$('n').value;pickedCat=id;openExp();$('a').value=a;$('n').value=n;
+}
+function addExp(){
+  const amt=parseFloat($('a').value);
+  if(!(amt>0)){$('a').focus();return}
+  S.exp.push({id:uid('e'),cat:pickedCat,amt:Math.round(amt*100)/100,note:$('n').value.trim(),ts:Date.now()});
+  save();closeSheet();
+  const d=new Date();vy=d.getFullYear();vm=d.getMonth();sel=null;render();
+}
+
+function openCat(){
+  showSheet(`<input class="in" id="cn" placeholder="Category name" maxlength="20" onkeydown="if(event.key==='Enter')addCat()">
+    <div class="sw">${COLORS.map(c=>`<button class="${c===pc?'on':''}" style="background:${c}" onclick="pc='${c}';swap()" aria-label="Colour"></button>`).join('')}</div>
+    <button class="go" onclick="addCat()">Add</button>
+    ${S.cats.map(c=>`<div class="it"><i class="dot" style="background:${c.color}"></i><span class="m">${esc(c.name)}</span><button class="x" onclick="delCat('${c.id}')" aria-label="Delete">×</button></div>`).join('')}`);
+}
+function swap(){const v=$('cn').value;openCat();$('cn').value=v}
+function addCat(){
+  const n=$('cn').value.trim();if(!n){$('cn').focus();return}
+  S.cats.push({id:uid('c'),name:n,color:pc});save();render();openCat();
+}
+function delCat(id){
+  const used=S.exp.some(e=>e.cat===id);
+  if(used&&!confirm('Delete this category and its expenses?'))return;
+  S.cats=S.cats.filter(c=>c.id!==id);S.exp=S.exp.filter(e=>e.cat!==id);
+  save();render();openCat();
+}
+
+/* history */
+function openHist(){$('hist').classList.add('show');hist()}
+function closeHist(){$('hist').classList.remove('show')}
+function hist(){
+  let h=`<div class="hh"><span>History</span><button class="x" onclick="closeHist()" aria-label="Close">×</button></div>
+  <div class="tabs"><button class="${hTab==='d'?'on':''}" onclick="hTab='d';hist()">Days</button><button class="${hTab==='m'?'on':''}" onclick="hTab='m';hist()">Months</button></div><div class="hl">`;
+  const list=[...S.exp].sort((a,b)=>b.ts-a.ts);
+  if(hTab==='d'){
+    const totals={};list.forEach(e=>{const k=new Date(e.ts).toDateString();totals[k]=(totals[k]||0)+e.amt});
+    let last='';
+    list.forEach(e=>{
+      const d=new Date(e.ts),k=d.toDateString();
+      if(k!==last){last=k;h+=`<div class="dh"><span>${d.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</span><span>${fmt(totals[k])}</span></div>`}
+      const c=cat(e.cat);
+      h+=`<div class="it"><i class="dot" style="background:${c.color}"></i><div class="m"><div>${esc(e.note||c.name)}</div><small>${esc(e.note?c.name+' · ':'')}${d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</small></div><span class="neg">${fmt(e.amt)}</span><button class="x" onclick="delExp('${e.id}')" aria-label="Delete">×</button></div>`;
+    });
+  }else{
+    const m={};list.forEach(e=>{const d=new Date(e.ts),k=d.getFullYear()*12+d.getMonth();m[k]=(m[k]||0)+e.amt});
+    Object.keys(m).sort((a,b)=>b-a).forEach(k=>{
+      const y=Math.floor(k/12),mo=k%12;
+      h+=`<button class="it" style="width:100%;text-align:left" onclick="vy=${y};vm=${mo};sel=null;closeHist();render()"><span class="m"><b>${monthName(y,mo)}</b></span><span class="neg">${fmt(m[k])}</span></button>`;
+    });
+  }
+  $('hist').innerHTML=h+'</div>';
+}
+function delExp(id){S.exp=S.exp.filter(e=>e.id!==id);save();render();hist()}
+
+render();
+</script>
+</body>
+</html>
