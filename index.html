@@ -4,8 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Expense Tracker</title>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('expense-tracker-theme')||'light'}catch(e){}</script>
 <style>
 :root{--k:#000;--w:#fff;--mut:#6b6b6b;--soft:#efefef;--red:#e03131;--blue:#1c7ed6;--green:#2f9e44}
+[data-theme=dark]{--k:#fff;--w:#000;--mut:#9a9a9a;--soft:#242424;color-scheme:dark}
 *{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
 body{background:var(--w);color:var(--k);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
@@ -13,7 +15,13 @@ button,input{font:inherit;color:inherit}
 button{background:none;border:0;cursor:pointer}
 .app{position:relative;max-width:440px;height:100%;margin:auto;display:flex;flex-direction:column;border-inline:2px solid var(--k);overflow:hidden}
 @media(max-width:440px){.app{border-inline:0}}
-header{padding:calc(14px + env(safe-area-inset-top,0px)) 20px 12px;border-bottom:2px solid var(--k);font-size:22px;font-weight:800;letter-spacing:-.01em}
+header{display:flex;align-items:center;justify-content:space-between;padding:calc(10px + env(safe-area-inset-top,0px)) 14px 10px 20px;border-bottom:2px solid var(--k);font-size:22px;font-weight:800;letter-spacing:-.01em}
+.gear{width:40px;height:40px;border-radius:50%;display:grid;place-items:center}
+.gear svg{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:2}
+.seg{display:flex;gap:8px}
+.seg button{flex:1;border:2px solid var(--k);border-radius:99px;padding:9px;font-weight:700}
+.seg button.on{background:var(--k);color:var(--w)}
+.st{color:var(--mut);text-align:center;min-height:1.4em}
 main{flex:1;overflow:auto;padding:18px 20px;display:flex;flex-direction:column;align-items:center;gap:16px}
 .chart{width:min(250px,68vw);aspect-ratio:1;flex:none}
 .chart svg{width:100%;height:100%;display:block}
@@ -41,7 +49,10 @@ main{flex:1;overflow:auto;padding:18px 20px;display:flex;flex-direction:column;a
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip{border:2px solid var(--k);border-radius:99px;padding:6px 14px;display:flex;align-items:center;gap:8px}
 .chip.on{background:var(--k);color:var(--w)}
-.sw{display:flex;gap:12px}
+.sw{display:flex;flex-wrap:wrap;gap:12px}
+.cc{position:relative;width:34px;height:34px;border-radius:50%;border:2px dashed var(--k);display:grid;place-items:center;cursor:pointer;overflow:hidden}
+.cc svg{width:16px;height:16px;stroke:currentColor;stroke-width:2.6;fill:none;stroke-linecap:round}
+.cc input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
 .sw button{width:34px;height:34px;border-radius:50%;border:2px solid var(--w);box-shadow:0 0 0 2px transparent}
 .sw button.on{box-shadow:0 0 0 2px var(--k)}
 .go{background:var(--k);color:var(--w);border-radius:14px;padding:13px;font-weight:700;width:100%}
@@ -63,14 +74,14 @@ main{flex:1;overflow:auto;padding:18px 20px;display:flex;flex-direction:column;a
 </head>
 <body>
 <div class="app">
-  <header>Expense Tracker</header>
+  <header><span>Expense Tracker</span><button class="gear" title="Settings" onclick="openSettings()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.6" stroke-width="3.2" stroke-dasharray="2.95 2.95"/><circle cx="12" cy="12" r="5.6"/><circle cx="12" cy="12" r="2.2"/></svg></button></header>
   <main>
     <div class="chart" id="chart"></div>
     <div class="pill" id="pill"></div>
     <div class="card" id="month"></div>
   </main>
   <div class="bar">
-    <button class="rb" title="Add category" onclick="openCat()"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button class="rb" title="Add category" onclick="openCat()"><svg viewBox="0 0 24 24"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1" fill="currentColor"/></svg></button>
     <button class="rb big" title="Add expense" onclick="openExp()"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
     <button class="rb" title="History" onclick="openHist()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/></svg></button>
   </div>
@@ -86,11 +97,14 @@ try{S=JSON.parse(localStorage.getItem(K))}catch(e){}
 if(!S||!Array.isArray(S.cats)||!Array.isArray(S.exp))S={cats:[
   {id:'c1',name:'Food',color:COLORS[0]},{id:'c2',name:'Travel',color:COLORS[1]},
   {id:'c3',name:'Bills',color:COLORS[2]},{id:'c4',name:'Other',color:COLORS[5]}],exp:[]};
+if(!Array.isArray(S.colors))S.colors=[];
 const save=()=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt=n=>'₹'+n.toLocaleString('en-IN',{maximumFractionDigits:2});
-const cat=id=>S.cats.find(c=>c.id===id)||{name:'Deleted',color:'#868e96'};
+const lum=c=>{const n=parseInt(c.slice(1),16);return(.299*(n>>16)+.587*(n>>8&255)+.114*(n&255))/255};
+const col=c=>{const d=document.documentElement.dataset.theme==='dark',l=lum(c);return d&&l<.18?'#ffffff':!d&&l>.88?'#000000':c};
+const cat=id=>{const c=S.cats.find(c=>c.id===id)||{name:'Deleted',color:'#868e96'};return{...c,color:col(c.color)}};
 const uid=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 const monthName=(y,m)=>new Date(y,m,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
 const T=new Date();let vy=T.getFullYear(),vm=T.getMonth(),sel=null,hTab='d',pc=COLORS[0],pickedCat=null;
@@ -108,7 +122,7 @@ function render(){
     seg+=`<circle class="seg" cx="100" cy="100" r="80" fill="none" stroke="${cat(r.id).color}" stroke-width="${sel===r.id?34:26}" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-acc}" transform="rotate(-90 100 100)" opacity="${sel&&sel!==r.id?.3:1}" onclick="pick('${r.id}')"/>`;
     acc+=f*C;
   });
-  $('chart').innerHTML=`<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="80" fill="none" stroke="#efefef" stroke-width="26"/>${seg}<text x="100" y="107" text-anchor="middle" font-size="19" font-weight="800" fill="#000">${fmt(Math.round(tot))}</text></svg>`;
+  $('chart').innerHTML=`<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="80" fill="none" stroke-width="26" style="stroke:var(--soft)"/>${seg}<text x="100" y="107" text-anchor="middle" font-size="19" font-weight="800" style="fill:var(--k)">${fmt(Math.round(tot))}</text></svg>`;
 
   if(sel){
     const r=rows.find(x=>x.id===sel);
@@ -133,7 +147,7 @@ function openExp(){
   if(!S.cats.length){openCat();return}
   if(!S.cats.find(c=>c.id===pickedCat))pickedCat=S.cats[0].id;
   showSheet(`<input class="in amt" id="a" type="number" inputmode="decimal" step="any" min="0" placeholder="₹0" onkeydown="if(event.key==='Enter')addExp()">
-    <div class="chips">${S.cats.map(c=>`<button class="chip ${c.id===pickedCat?'on':''}" onclick="pickCat('${c.id}')"><i class="dot" style="background:${c.color}"></i>${esc(c.name)}</button>`).join('')}</div>
+    <div class="chips">${S.cats.map(c=>`<button class="chip ${c.id===pickedCat?'on':''}" onclick="pickCat('${c.id}')"><i class="dot" style="background:${col(c.color)}"></i>${esc(c.name)}</button>`).join('')}</div>
     <input class="in" id="n" placeholder="Note" maxlength="60" onkeydown="if(event.key==='Enter')addExp()">
     <button class="go" onclick="addExp()">Add</button>`);
   setTimeout(()=>$('a').focus(),50);
@@ -151,11 +165,16 @@ function addExp(){
 
 function openCat(){
   showSheet(`<input class="in" id="cn" placeholder="Category name" maxlength="20" onkeydown="if(event.key==='Enter')addCat()">
-    <div class="sw">${COLORS.map(c=>`<button class="${c===pc?'on':''}" style="background:${c}" onclick="pc='${c}';swap()" aria-label="Colour"></button>`).join('')}</div>
+    <div class="sw">${COLORS.concat(S.colors).map(c=>`<button class="${c===pc?'on':''}" style="background:${col(c)}" onclick="pc='${c}';swap()" aria-label="Colour"></button>`).join('')}<label class="cc" title="More colours"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><input type="color" value="${pc}" onchange="newColor(this.value)"></label></div>
     <button class="go" onclick="addCat()">Add</button>
-    ${S.cats.map(c=>`<div class="it"><i class="dot" style="background:${c.color}"></i><span class="m">${esc(c.name)}</span><button class="x" onclick="delCat('${c.id}')" aria-label="Delete">×</button></div>`).join('')}`);
+    ${S.cats.map(c=>`<div class="it"><i class="dot" style="background:${col(c.color)}"></i><span class="m">${esc(c.name)}</span><button class="x" onclick="delCat('${c.id}')" aria-label="Delete">×</button></div>`).join('')}`);
 }
 function swap(){const v=$('cn').value;openCat();$('cn').value=v}
+function newColor(v){
+  v=v.toLowerCase();
+  if(!COLORS.includes(v)&&!S.colors.includes(v)){S.colors.push(v);save()}
+  pc=v;swap();
+}
 function addCat(){
   const n=$('cn').value.trim();if(!n){$('cn').focus();return}
   S.cats.push({id:uid('c'),name:n,color:pc});save();render();openCat();
@@ -165,6 +184,54 @@ function delCat(id){
   if(used&&!confirm('Delete this category and its expenses?'))return;
   S.cats=S.cats.filter(c=>c.id!==id);S.exp=S.exp.filter(e=>e.cat!==id);
   save();render();openCat();
+}
+
+/* settings */
+function setTheme(t){
+  document.documentElement.dataset.theme=t;
+  try{localStorage.setItem('expense-tracker-theme',t)}catch(e){}
+  render();openSettings();
+}
+function openSettings(msg){
+  const t=document.documentElement.dataset.theme==='dark'?'dark':'light';
+  showSheet(`<div class="seg"><button class="${t==='light'?'on':''}" onclick="setTheme('light')">Light</button><button class="${t==='dark'?'on':''}" onclick="setTheme('dark')">Dark</button></div>
+    <div class="seg"><button onclick="exportData()">Export</button><button onclick="$('imp').click()">Import</button></div>
+    <div class="st">${msg||''}</div>
+    <input type="file" id="imp" accept=".json,application/json" hidden onchange="importData(this.files[0])">`);
+}
+function exportData(){
+  const blob=new Blob([JSON.stringify({app:'expense-tracker',version:1,exported:new Date().toISOString(),cats:S.cats,exp:S.exp},null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='expense-tracker-'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  openSettings('Exported');
+}
+function importData(f){
+  if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const d=JSON.parse(r.result);
+      if(!d||!Array.isArray(d.cats)||!Array.isArray(d.exp))throw 0;
+      const cids=new Set(S.cats.map(c=>c.id)),eids=new Set(S.exp.map(e=>e.id));
+      let nc=0,ne=0;
+      d.cats.forEach(c=>{
+        if(c&&typeof c.id==='string'&&typeof c.name==='string'&&/^#[0-9a-f]{6}$/i.test(c.color)&&!cids.has(c.id)){
+          S.cats.push({id:c.id,name:c.name.slice(0,20),color:c.color.toLowerCase()});cids.add(c.id);nc++;
+        }
+      });
+      d.exp.forEach(e=>{
+        if(e&&typeof e.id==='string'&&typeof e.cat==='string'&&Number.isFinite(e.amt)&&e.amt>0&&Number.isFinite(e.ts)&&!eids.has(e.id)){
+          S.exp.push({id:e.id,cat:e.cat,amt:e.amt,note:typeof e.note==='string'?e.note.slice(0,60):'',ts:e.ts});eids.add(e.id);ne++;
+        }
+      });
+      save();render();
+      openSettings(`Imported ${ne} expenses, ${nc} categories`);
+    }catch(x){openSettings('Invalid file')}
+  };
+  r.readAsText(f);
 }
 
 /* history */
