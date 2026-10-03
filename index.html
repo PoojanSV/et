@@ -218,7 +218,7 @@ function addExp(){
   if(!(amt>0)){$('a').focus();return}
   S.exp.push({id:uid('e'),cat:pickedCat,amt:Math.round(amt*100)/100,note:$('n').value.trim(),ts:Date.now()});
   save();closeSheet();
-  const d=new Date();vy=d.getFullYear();vm=d.getMonth();mode='m';dOff=0;sel=null;render();
+  const d=new Date();vy=d.getFullYear();vm=d.getMonth();mode='d';dOff=0;sel=null;render();
 }
 
 function openCat(){
