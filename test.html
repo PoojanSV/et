@@ -144,7 +144,7 @@ const cat=id=>{const c=S.cats.find(c=>c.id===id)||{name:'Deleted',color:'#868e96
 const uid=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 const monthName=(y,m)=>new Date(y,m,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
 const T=new Date();let vy=T.getFullYear(),vm=T.getMonth(),sel=null,hTab='d',pc=COLORS[0],pickedCat=null;
-let mode='m',dOff=0; /* mode: 'm' = pie shows the month, 'd' = pie shows one day; dOff = days back from today */
+let mode='d',dOff=0; /* mode: 'm' = pie shows the month, 'd' = pie shows one day; dOff = days back from today. Default on load: today */
 const dayStart=o=>{const n=new Date();return new Date(n.getFullYear(),n.getMonth(),n.getDate()-o)};
 const sameDay=(ts,d)=>{const x=new Date(ts);return x.getFullYear()===d.getFullYear()&&x.getMonth()===d.getMonth()&&x.getDate()===d.getDate()};
 const maxBack=()=>{if(!S.exp.length)return 0;const m=S.exp.reduce((a,e)=>Math.min(a,e.ts),Infinity),f=new Date(m);return Math.max(0,Math.round((dayStart(0)-new Date(f.getFullYear(),f.getMonth(),f.getDate()))/864e5))};
