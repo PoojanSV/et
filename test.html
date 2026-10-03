@@ -4,7 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Expense Tracker</title>
-<script>try{document.documentElement.dataset.theme=localStorage.getItem('expense-tracker-theme')||'light'}catch(e){}</script>
+<script>(function(){
+var d=window.matchMedia&&matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light',t=null,s=null;
+try{t=localStorage.getItem('expense-tracker-theme');s=localStorage.getItem('expense-tracker-theme-sys')}catch(e){}
+/* use the saved manual choice only if the device theme hasn't changed since it was made */
+if((t!=='dark'&&t!=='light')||s!==d)t=d;
+document.documentElement.dataset.theme=t})()</script>
 <style>
 :root{--k:#000;--w:#fff;--mut:#6b6b6b;--soft:#efefef;--red:#e03131;--blue:#1c7ed6;--green:#2f9e44}
 [data-theme=dark]{--k:#fff;--w:#000;--mut:#9a9a9a;--soft:#242424;color-scheme:dark}
@@ -15,7 +20,10 @@ button,input{font:inherit;color:inherit}
 button{background:none;border:0;cursor:pointer}
 .app{position:relative;max-width:440px;height:100%;margin:auto;display:flex;flex-direction:column;border-inline:2px solid var(--k);overflow:hidden}
 @media(max-width:440px){.app{border-inline:0}}
-header{display:flex;align-items:center;justify-content:space-between;padding:calc(10px + env(safe-area-inset-top,0px)) 14px 10px 20px;border-bottom:2px solid var(--k);font-size:22px;font-weight:800;letter-spacing:-.01em}
+header{display:flex;align-items:center;justify-content:space-between;padding:calc(10px + env(safe-area-inset-top,0px)) 14px 10px 20px;border-bottom:2px solid var(--k)}
+.logo{height:36px;width:auto;max-width:calc(100% - 56px);display:block}
+.logo.d,[data-theme=dark] .logo.l{display:none}
+[data-theme=dark] .logo.d{display:block}
 .gear{width:40px;height:40px;border-radius:50%;display:grid;place-items:center}
 .gear svg{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:2}
 .seg{display:flex;gap:8px}
@@ -26,12 +34,13 @@ main{flex:1;overflow:auto;padding:18px 20px;display:flex;flex-direction:column;a
 .chart{width:min(250px,68vw);aspect-ratio:1;flex:none}
 .chart svg{width:100%;height:100%;display:block}
 .seg{cursor:pointer}
-.pill{min-width:200px;max-width:100%;padding:10px 20px;border:2px solid var(--k);border-radius:16px;text-align:center;display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap}
+.pill{min-width:min(260px,100%);max-width:100%;padding:6px 8px;border:2px solid var(--k);border-radius:16px;display:flex;align-items:center;gap:4px}
+.pill .mid{flex:1;min-width:0;display:flex;gap:2px 8px;align-items:center;justify-content:center;flex-wrap:wrap;text-align:center}
+.mid small{width:100%;color:var(--mut);line-height:1.1}
+.pn{width:34px;height:34px;border-radius:50%;font-size:22px;line-height:1;flex:none}
+.pn:disabled{opacity:.2;cursor:default}
 .pill i,.dot{width:12px;height:12px;border-radius:50%;flex:none;display:inline-block}
-.mode{display:flex;gap:8px;width:min(250px,100%)}
-.mode button{flex:1;border:2px solid var(--k);border-radius:99px;padding:6px;font-weight:700}
-.mode button.on{background:var(--k);color:var(--w)}
-.card{width:100%;border:2px solid var(--k);border-radius:24px;padding:14px 18px}
+.card{width:100%;border:2px solid var(--k);border-radius:24px;padding:14px 18px;cursor:pointer}
 .nav{display:flex;align-items:center;justify-content:space-between;font-weight:700}
 .nav button{width:36px;height:36px;border-radius:50%;font-size:22px;line-height:1}
 .nav button:disabled{opacity:.2;cursor:default}
@@ -58,6 +67,14 @@ main{flex:1;overflow:auto;padding:18px 20px;display:flex;flex-direction:column;a
 .cc input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
 .sw button{width:34px;height:34px;border-radius:50%;border:2px solid var(--w);box-shadow:0 0 0 2px transparent}
 .sw button.on{box-shadow:0 0 0 2px var(--k)}
+.sw button.cc{border:2px dashed var(--k);box-shadow:none}
+.sw button.cc.act{background:var(--k);color:var(--w);border-style:solid}
+.sw.rmm button:not(.cc){position:relative}
+.sw.rmm button:not(.cc)::after{content:'×';position:absolute;top:-7px;right:-7px;width:17px;height:17px;border-radius:50%;background:var(--red);color:#fff;font-size:13px;font-weight:700;line-height:17px;text-align:center}
+#cf{z-index:9;align-items:center;padding:24px}
+.dlg{width:100%;background:var(--w);border:2px solid var(--k);border-radius:24px;padding:22px 20px 20px;display:flex;flex-direction:column;gap:18px;text-align:center}
+.dlg p{font-weight:700;font-size:17px;overflow-wrap:anywhere}
+.seg button.dan{background:var(--red);border-color:var(--red);color:#fff}
 .go{background:var(--k);color:var(--w);border-radius:14px;padding:13px;font-weight:700;width:100%}
 .x{width:32px;height:32px;border-radius:50%;font-size:22px;line-height:1;color:var(--red);flex:none}
 #hist{position:absolute;inset:0;background:var(--w);z-index:6;display:none;flex-direction:column}
@@ -77,12 +94,11 @@ main{flex:1;overflow:auto;padding:18px 20px;display:flex;flex-direction:column;a
 </head>
 <body>
 <div class="app">
-  <header><span>Expense Tracker</span><button class="gear" title="Settings" onclick="openSettings()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.6" stroke-width="3.2" stroke-dasharray="2.95 2.95"/><circle cx="12" cy="12" r="5.6"/><circle cx="12" cy="12" r="2.2"/></svg></button></header>
+  <header><span><img class="logo l" alt="Expense Tracker" src="AppLogoLight.png"><img class="logo d" alt="" aria-hidden="true" src="AppLogoDark.jpeg"></span><button class="gear" title="Settings" onclick="openSettings()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.6" stroke-width="3.2" stroke-dasharray="2.95 2.95"/><circle cx="12" cy="12" r="5.6"/><circle cx="12" cy="12" r="2.2"/></svg></button></header>
   <main>
-    <div class="chart" id="chart"></div>
+    <div class="chart" id="chart"></div> 
     <div class="pill" id="pill"></div>
-    <div class="mode" id="mode"></div>
-    <div class="card" id="month"></div>
+    <div class="card" id="month" onclick="toMonth()"></div>
   </main>
   <div class="bar">
     <button class="rb" title="Add category" onclick="openCat()"><svg viewBox="0 0 24 24"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1" fill="currentColor"/></svg></button>
@@ -91,6 +107,7 @@ main{flex:1;overflow:auto;padding:18px 20px;display:flex;flex-direction:column;a
   </div>
   <div class="ov" id="ov" onclick="if(event.target===this)closeSheet()"><div class="sh" id="sh"></div></div>
   <div id="hist"></div>
+  <div class="ov" id="cf" onclick="if(event.target===this)cfNo()"></div>
 </div>
 
 <script>
@@ -102,6 +119,9 @@ if(!S||!Array.isArray(S.cats)||!Array.isArray(S.exp))S={cats:[
   {id:'c1',name:'Food',color:COLORS[0]},{id:'c2',name:'Travel',color:COLORS[1]},
   {id:'c3',name:'Bills',color:COLORS[2]},{id:'c4',name:'Other',color:COLORS[5]}],exp:[]};
 if(!Array.isArray(S.colors))S.colors=[];
+if(!Array.isArray(S.hidden))S.hidden=[];
+let rmMode=false;
+const palette=()=>COLORS.filter(c=>!S.hidden.includes(c)).concat(S.colors);
 const save=()=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -111,57 +131,63 @@ const col=c=>{const d=document.documentElement.dataset.theme==='dark',l=lum(c);r
 const cat=id=>{const c=S.cats.find(c=>c.id===id)||{name:'Deleted',color:'#868e96'};return{...c,color:col(c.color)}};
 const uid=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 const monthName=(y,m)=>new Date(y,m,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
-const T=new Date();let vy=T.getFullYear(),vm=T.getMonth(),sel=null,hTab='d',pc=COLORS[0],pickedCat=null,cm='d'; // cm: chart mode, 'd' = today (default), 'm' = month
+const T=new Date();let vy=T.getFullYear(),vm=T.getMonth(),sel=null,hTab='d',pc=COLORS[0],pickedCat=null;
+let mode='m',dOff=0; /* mode: 'm' = pie shows the month, 'd' = pie shows one day; dOff = days back from today */
+const dayStart=o=>{const n=new Date();return new Date(n.getFullYear(),n.getMonth(),n.getDate()-o)};
+const sameDay=(ts,d)=>{const x=new Date(ts);return x.getFullYear()===d.getFullYear()&&x.getMonth()===d.getMonth()&&x.getDate()===d.getDate()};
+const maxBack=()=>{if(!S.exp.length)return 0;const m=S.exp.reduce((a,e)=>Math.min(a,e.ts),Infinity),f=new Date(m);return Math.max(0,Math.round((dayStart(0)-new Date(f.getFullYear(),f.getMonth(),f.getDate()))/864e5))};
+const dayLabel=o=>{if(o===0)return'Today';if(o===1)return'Yesterday';const d=dayStart(o),o2={weekday:'short',day:'numeric',month:'short'};if(d.getFullYear()!==new Date().getFullYear())o2.year='numeric';return d.toLocaleDateString('en-US',o2)};
 
 function sums(list){const m={};list.forEach(e=>m[e.cat]=(m[e.cat]||0)+e.amt);
   return Object.entries(m).map(([id,v])=>({id,v})).sort((a,b)=>b.v-a.v)}
 const inMonth=e=>{const d=new Date(e.ts);return d.getFullYear()===vy&&d.getMonth()===vm};
 
-const isToday=e=>new Date(e.ts).toDateString()===new Date().toDateString();
-const scopeList=()=>cm==='d'?S.exp.filter(isToday):S.exp.filter(inMonth);
-
-function donut(rows,tot,sel,interactive){
+function render(){
+  const mx=maxBack();if(dOff>mx)dOff=mx;
+  const D=dayStart(dOff),dl=S.exp.filter(e=>sameDay(e.ts,D)),dTot=dl.reduce((a,e)=>a+e.amt,0);
+  const me=S.exp.filter(inMonth),mTot=me.reduce((a,e)=>a+e.amt,0),mRows=sums(me);
+  const tot=mode==='d'?dTot:mTot,rows=mode==='d'?sums(dl):mRows;
+  if(sel&&!rows.find(r=>r.id===sel))sel=null;
   const C=2*Math.PI*80;let acc=0,seg='';
   rows.forEach(r=>{
     const f=r.v/tot,gap=rows.length>1?3:0,len=Math.max(0,f*C-gap);
-    seg+=`<circle class="seg" cx="100" cy="100" r="80" fill="none" stroke="${cat(r.id).color}" stroke-width="${sel===r.id?34:26}" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-acc}" transform="rotate(-90 100 100)" opacity="${sel&&sel!==r.id?.3:1}"${interactive?` onclick="pick('${r.id}')"`:''}/>`;
+    seg+=`<circle class="seg" cx="100" cy="100" r="80" fill="none" stroke="${cat(r.id).color}" stroke-width="${sel===r.id?34:26}" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-acc}" transform="rotate(-90 100 100)" opacity="${sel&&sel!==r.id?.3:1}" onclick="pick('${r.id}')"/>`;
     acc+=f*C;
   });
-  return `<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="80" fill="none" stroke-width="26" style="stroke:var(--soft)"/>${seg}<text x="100" y="107" text-anchor="middle" font-size="19" font-weight="800" style="fill:var(--k)">${fmt(Math.round(tot))}</text></svg>`;
-}
+  $('chart').innerHTML=`<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="80" fill="none" stroke-width="26" style="stroke:var(--soft)"/>${seg}<text x="100" y="107" text-anchor="middle" font-size="19" font-weight="800" style="fill:var(--k)">${fmt(Math.round(tot))}</text></svg>`;
 
-function render(){
-  /* chart scope: today (default) or the viewed month */
-  const list=scopeList(),tot=list.reduce((a,e)=>a+e.amt,0),rows=sums(list);
-  if(sel&&!rows.find(r=>r.id===sel))sel=null;
-  $('chart').innerHTML=donut(rows,tot,sel,true);
-
+  const pn=(fn,dis,lab,ch)=>`<button class="pn" onclick="${fn}" aria-label="${lab}" ${dis?'disabled':''}>${ch}</button>`;
+  let mid;
   if(sel){
     const r=rows.find(x=>x.id===sel);
-    $('pill').innerHTML=`<i style="background:${cat(sel).color}"></i>${esc(cat(sel).name)} <b>${fmt(r.v)}</b> ${Math.round(r.v/tot*100)}%`;
-  }else{
-    $('pill').innerHTML=`${cm==='d'?'Today':monthName(vy,vm)} <b>${fmt(tot)}</b>`;
-  }
-  $('mode').innerHTML=`<button class="${cm==='d'?'on':''}" onclick="setMode('d')">Today</button><button class="${cm==='m'?'on':''}" onclick="setMode('m')">Month</button>`;
+    mid=`<i style="background:${cat(sel).color}"></i>${esc(cat(sel).name)} <b>${fmt(r.v)}</b> ${Math.round(r.v/tot*100)}%`+(mode==='d'?`<small>${dayLabel(dOff)}</small>`:'');
+  }else mid=`${dayLabel(dOff)} <b>${fmt(dTot)}</b>`;
+  $('pill').innerHTML=pn('day(1)',dOff>=mx,'Previous day','‹')+`<div class="mid">${mid}</div>`+pn('day(-1)',dOff<=0,'Next day','›');
 
-  /* month card (always monthly) */
-  const me=S.exp.filter(inMonth),mtot=me.reduce((a,e)=>a+e.amt,0),mrows=sums(me);
   const atNow=vy===new Date().getFullYear()&&vm===new Date().getMonth();
   $('month').innerHTML=`<div class="nav"><button onclick="step(-1)" aria-label="Previous month">‹</button><span>${monthName(vy,vm)}</span><button onclick="step(1)" aria-label="Next month" ${atNow?'disabled':''}>›</button></div>
-    <div class="tot">${fmt(mtot)}</div>`+mrows.map(r=>`<button class="row" onclick="pickM('${r.id}')"><i class="dot" style="background:${cat(r.id).color}"></i><span>${esc(cat(r.id).name)}</span><b>${fmt(r.v)}</b></button>`).join('');
+    <div class="tot">${fmt(mTot)}</div>`+mRows.map(r=>`<button class="row" onclick="pickRow('${r.id}')"><i class="dot" style="background:${cat(r.id).color}"></i><span>${esc(cat(r.id).name)}</span><b>${fmt(r.v)}</b></button>`).join('');
 }
 function pick(id){sel=sel===id?null:id;render()}
-function pickM(id){if(cm!=='m'){cm='m';sel=id}else sel=sel===id?null:id;render()}
-function setMode(m){
-  cm=m;sel=null;
-  if(m==='d'){const d=new Date();vy=d.getFullYear();vm=d.getMonth()}
-  render();
-}
-function step(d){vm+=d;if(vm<0){vm=11;vy--}if(vm>11){vm=0;vy++}cm='m';sel=null;render()}
+function step(d){vm+=d;if(vm<0){vm=11;vy--}if(vm>11){vm=0;vy++}mode='m';dOff=0;sel=null;render()}
+function day(d){dOff=Math.max(0,Math.min(maxBack(),dOff+d));mode='d';sel=null;const D=dayStart(dOff);vy=D.getFullYear();vm=D.getMonth();render()}
+function toMonth(){if(mode!=='m'||dOff){mode='m';dOff=0;sel=null;render()}}
+function pickRow(id){const was=mode==='m';mode='m';dOff=0;sel=was&&sel===id?null:id;render()}
 
 /* sheets */
 function showSheet(h){$('sh').innerHTML=h;$('ov').classList.add('show')}
-function closeSheet(){$('ov').classList.remove('show')}
+function closeSheet(){rmMode=false;$('ov').classList.remove('show')}
+
+/* confirm before anything is removed */
+let cfFn=null;
+function ask(msg,fn,label){
+  cfFn=fn;
+  $('cf').innerHTML=`<div class="dlg" role="alertdialog" aria-modal="true"><p>${esc(msg)}</p><div class="seg"><button id="cfn" onclick="cfNo()">Cancel</button><button class="dan" onclick="cfYes()">${esc(label||'Delete')}</button></div></div>`;
+  $('cf').classList.add('show');setTimeout(()=>$('cfn')&&$('cfn').focus(),30);
+}
+function cfNo(){cfFn=null;$('cf').classList.remove('show')}
+function cfYes(){const f=cfFn;cfNo();if(f)f()}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('cf').classList.contains('show'))cfNo()});
 
 function openExp(){
   if(!S.cats.length){openCat();return}
@@ -180,19 +206,32 @@ function addExp(){
   if(!(amt>0)){$('a').focus();return}
   S.exp.push({id:uid('e'),cat:pickedCat,amt:Math.round(amt*100)/100,note:$('n').value.trim(),ts:Date.now()});
   save();closeSheet();
-  const d=new Date();vy=d.getFullYear();vm=d.getMonth();sel=null;render();
+  const d=new Date();vy=d.getFullYear();vm=d.getMonth();mode='m';dOff=0;sel=null;render();
 }
 
 function openCat(){
+  const pal=palette();if(!pal.length)S.hidden=[];if(!palette().includes(pc))pc=palette()[0];
+  const rm=rmMode&&palette().length>1;
   showSheet(`<input class="in" id="cn" placeholder="Category name" maxlength="20" onkeydown="if(event.key==='Enter')addCat()">
-    <div class="sw">${COLORS.concat(S.colors).map(c=>`<button class="${c===pc?'on':''}" style="background:${col(c)}" onclick="pc='${c}';swap()" aria-label="Colour"></button>`).join('')}<label class="cc" title="More colours"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><input type="color" value="${pc}" onchange="newColor(this.value)"></label></div>
+    <div class="sw ${rm?'rmm':''}">${palette().map(c=>`<button class="${c===pc&&!rm?'on':''}" style="background:${col(c)}" onclick="${rm?`rmColor('${c}')`:`pc='${c}';swap()`}" aria-label="${rm?'Remove colour':'Colour'}"></button>`).join('')}<label class="cc" title="More colours"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><input type="color" value="${pc}" onchange="newColor(this.value)"></label><button class="cc ${rmMode?'act':''}" title="Remove colours" aria-label="Remove colours" onclick="togRm()"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button></div>
     <button class="go" onclick="addCat()">Add</button>
     ${S.cats.map(c=>`<div class="it"><i class="dot" style="background:${col(c.color)}"></i><span class="m">${esc(c.name)}</span><button class="x" onclick="delCat('${c.id}')" aria-label="Delete">×</button></div>`).join('')}`);
 }
 function swap(){const v=$('cn').value;openCat();$('cn').value=v}
+function togRm(){rmMode=!rmMode;swap()}
+function rmColor(c){
+  if(palette().length<=1)return;
+  ask('Remove this colour?',()=>{
+    if(COLORS.includes(c))S.hidden.push(c);else S.colors=S.colors.filter(x=>x!==c);
+    if(pc===c)pc=palette()[0];
+    save();swap();
+  },'Remove');
+}
 function newColor(v){
   v=v.toLowerCase();
-  if(!COLORS.includes(v)&&!S.colors.includes(v)){S.colors.push(v);save()}
+  if(COLORS.includes(v)){if(S.hidden.includes(v)){S.hidden=S.hidden.filter(x=>x!==v);save()}}
+  else if(!S.colors.includes(v)){S.colors.push(v);save()}
+  rmMode=false;
   pc=v;swap();
 }
 function addCat(){
@@ -200,67 +239,28 @@ function addCat(){
   S.cats.push({id:uid('c'),name:n,color:pc});save();render();openCat();
 }
 function delCat(id){
-  const used=S.exp.some(e=>e.cat===id);
-  if(used&&!confirm('Delete this category and its expenses?'))return;
-  S.cats=S.cats.filter(c=>c.id!==id);S.exp=S.exp.filter(e=>e.cat!==id);
-  save();render();openCat();
+  const c=S.cats.find(x=>x.id===id),n=S.exp.filter(e=>e.cat===id).length;
+  ask(n?`Delete "${c?c.name:'this category'}" and its ${n} expense${n>1?'s':''}?`:`Delete "${c?c.name:'this category'}"?`,()=>{
+    S.cats=S.cats.filter(c=>c.id!==id);S.exp=S.exp.filter(e=>e.cat!==id);
+    save();render();openCat();
+  });
 }
 
-/* settings */
+/* settings / theme */
+const sysTheme=()=>window.matchMedia&&matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';
+let lastSys=sysTheme();
+function saveTheme(t){try{localStorage.setItem('expense-tracker-theme',t);localStorage.setItem('expense-tracker-theme-sys',sysTheme())}catch(e){}}
 function setTheme(t){
   document.documentElement.dataset.theme=t;
-  try{localStorage.setItem('expense-tracker-theme',t)}catch(e){}
+  saveTheme(t);
   render();openSettings();
 }
 function openSettings(msg){
   const t=document.documentElement.dataset.theme==='dark'?'dark':'light';
   showSheet(`<div class="seg"><button class="${t==='light'?'on':''}" onclick="setTheme('light')">Light</button><button class="${t==='dark'?'on':''}" onclick="setTheme('dark')">Dark</button></div>
     <div class="seg"><button onclick="exportData()">Export</button><button onclick="$('imp').click()">Import</button></div>
-    <div class="seg"><button onclick="makeReport()">Report (${cm==='d'?'Today':'Month'})</button></div>
     <div class="st">${msg||''}</div>
     <input type="file" id="imp" accept=".json,application/json" hidden onchange="importData(this.files[0])">`);
-}
-/* report: generated in the same theme (dark/light) the app is using */
-function makeReport(){
-  const dark=document.documentElement.dataset.theme==='dark',day=cm==='d';
-  const P=dark?{k:'#fff',w:'#000',mut:'#9a9a9a',soft:'#242424'}:{k:'#000',w:'#fff',mut:'#6b6b6b',soft:'#efefef'};
-  const list=scopeList().sort((a,b)=>b.ts-a.ts),tot=list.reduce((a,e)=>a+e.amt,0),rows=sums(list);
-  const now=new Date(),pad=n=>String(n).padStart(2,'0');
-  const title=day?now.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'}):monthName(vy,vm);
-  const totals={};list.forEach(e=>{const k=new Date(e.ts).toDateString();totals[k]=(totals[k]||0)+e.amt});
-  let last='',items='';
-  list.forEach(e=>{
-    const d=new Date(e.ts),k=d.toDateString(),c=cat(e.cat);
-    if(k!==last){last=k;items+=`<div class="dh"><span>${d.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</span><span>${fmt(totals[k])}</span></div>`}
-    items+=`<div class="it"><i class="dot" style="background:${c.color}"></i><div class="m"><div>${esc(e.note||c.name)}</div><small>${esc(e.note?c.name+' · ':'')}${d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</small></div><b>${fmt(e.amt)}</b></div>`;
-  });
-  const cats=rows.map(r=>`<div class="it"><i class="dot" style="background:${cat(r.id).color}"></i><span class="m">${esc(cat(r.id).name)}</span><b>${fmt(r.v)}</b><span class="pc">${Math.round(r.v/tot*100)}%</span></div>`).join('');
-  const html=`<!DOCTYPE html><html lang="en" data-theme="${dark?'dark':'light'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="${dark?'dark':'light'}"><title>Expense Report - ${esc(title)}</title><style>
-:root{--k:${P.k};--w:${P.w};--mut:${P.mut};--soft:${P.soft};color-scheme:${dark?'dark':'light'}}
-*{box-sizing:border-box;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-body{background:var(--w);color:var(--k);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:24px 20px}
-.r{max-width:440px;margin:auto}
-h1{font-size:22px;font-weight:800}.sub{color:var(--mut);margin-bottom:18px}
-.chart{width:min(250px,70%);margin:0 auto 16px}.chart svg{width:100%;display:block}
-.tot{text-align:center;font-size:28px;font-weight:800;margin-bottom:14px}
-h2{font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:20px 0 4px}
-.it{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--soft)}
-.it .m{flex:1;min-width:0}.it small{color:var(--mut);display:block}.pc{color:var(--mut);width:42px;text-align:right}
-.dot{width:12px;height:12px;border-radius:50%;flex:none}
-.dh{display:flex;justify-content:space-between;font-weight:800;padding:14px 0 4px}
-.ft{color:var(--mut);text-align:center;margin-top:24px;font-size:13px}
-@media print{@page{margin:0}body{padding:24px}}
-</style></head><body><div class="r"><h1>Expense Report</h1><div class="sub">${esc(title)}</div>
-<div class="chart">${donut(rows,tot,null,false)}</div><div class="tot">${fmt(tot)}</div>
-${rows.length?`<h2>By category</h2>${cats}<h2>Expenses</h2>${items}`:'<div class="sub" style="text-align:center">No expenses in this period</div>'}
-<div class="ft">Generated ${now.toLocaleString('en-IN')}</div></div></body></html>`;
-  const name='expense-report-'+(day?`${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`:`${vy}-${pad(vm+1)}`)+'.html';
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([html],{type:'text/html'}));
-  a.download=name;
-  document.body.appendChild(a);a.click();a.remove();
-  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-  openSettings('Report downloaded');
 }
 function exportData(){
   const blob=new Blob([JSON.stringify({app:'expense-tracker',version:1,exported:new Date().toISOString(),cats:S.cats,exp:S.exp},null,2)],{type:'application/json'});
@@ -317,12 +317,35 @@ function hist(){
     const m={};list.forEach(e=>{const d=new Date(e.ts),k=d.getFullYear()*12+d.getMonth();m[k]=(m[k]||0)+e.amt});
     Object.keys(m).sort((a,b)=>b-a).forEach(k=>{
       const y=Math.floor(k/12),mo=k%12;
-      h+=`<button class="it" style="width:100%;text-align:left" onclick="vy=${y};vm=${mo};cm='m';sel=null;closeHist();render()"><span class="m"><b>${monthName(y,mo)}</b></span><span class="neg">${fmt(m[k])}</span></button>`;
+      h+=`<button class="it" style="width:100%;text-align:left" onclick="vy=${y};vm=${mo};mode='m';dOff=0;sel=null;closeHist();render()"><span class="m"><b>${monthName(y,mo)}</b></span><span class="neg">${fmt(m[k])}</span></button>`;
     });
   }
   $('hist').innerHTML=h+'</div>';
 }
-function delExp(id){S.exp=S.exp.filter(e=>e.id!==id);save();render();hist()}
+function delExp(id){
+  const e=S.exp.find(x=>x.id===id);
+  ask(e?`Delete this ${fmt(e.amt)} expense?`:'Delete this expense?',()=>{S.exp=S.exp.filter(x=>x.id!==id);save();render();hist()});
+}
+
+/* follow device theme live; the Settings toggle still works until the device theme changes */
+function syncSys(){
+  const s=sysTheme();
+  if(s===lastSys)return;
+  lastSys=s;
+  document.documentElement.dataset.theme=s;
+  saveTheme(s);
+  render();
+  if($('hist').classList.contains('show'))hist();
+  if($('ov').classList.contains('show')&&$('imp'))openSettings();
+}
+if(window.matchMedia){
+  const mq=matchMedia('(prefers-color-scheme:dark)');
+  mq.addEventListener?mq.addEventListener('change',syncSys):mq.addListener&&mq.addListener(syncSys);
+}
+/* fallback for browsers/PWAs that don't fire the change event while in the background */
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncSys()});
+window.addEventListener('pageshow',syncSys);
+window.addEventListener('focus',syncSys);
 
 render();
 </script>
