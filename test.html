@@ -201,24 +201,24 @@ function cfNo(){cfFn=null;$('cf').classList.remove('show')}
 function cfYes(){const f=cfFn;cfNo();if(f)f()}
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('cf').classList.contains('show'))cfNo()});
 
-function openExp(){
+function openExp(focusAmt){
   if(!S.cats.length){openCat();return}
   if(!S.cats.find(c=>c.id===pickedCat))pickedCat=S.cats[0].id;
   showSheet(`<input class="in amt" id="a" type="number" inputmode="decimal" step="any" min="0" placeholder="₹0" onkeydown="if(event.key==='Enter')addExp()">
     <div class="chips">${S.cats.map(c=>`<button class="chip ${c.id===pickedCat?'on':''}" onclick="pickCat('${c.id}')"><i class="dot" style="background:${col(c.color)}"></i>${esc(c.name)}</button>`).join('')}</div>
     <input class="in" id="n" placeholder="Note" maxlength="60" onkeydown="if(event.key==='Enter')addExp()">
     <button class="go" onclick="addExp()">Add</button>`);
-  setTimeout(()=>$('a').focus(),50);
+  if(focusAmt)setTimeout(()=>$('a').focus(),50); /* keyboard opens only after a category is picked, not when the sheet opens */
 }
 function pickCat(id){
-  const a=$('a').value,n=$('n').value;pickedCat=id;openExp();$('a').value=a;$('n').value=n;
+  const a=$('a').value,n=$('n').value;pickedCat=id;openExp(true);$('a').value=a;$('n').value=n;
 }
 function addExp(){
   const amt=parseFloat($('a').value);
   if(!(amt>0)){$('a').focus();return}
   S.exp.push({id:uid('e'),cat:pickedCat,amt:Math.round(amt*100)/100,note:$('n').value.trim(),ts:Date.now()});
   save();closeSheet();
-  const d=new Date();vy=d.getFullYear();vm=d.getMonth();mode='m';dOff=0;sel=null;render();
+  const d=new Date();vy=d.getFullYear();vm=d.getMonth();mode='d';dOff=0;sel=null;render();
 }
 
 function openCat(){
