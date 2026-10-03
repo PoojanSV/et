@@ -91,7 +91,7 @@ main{flex:1;overflow:auto;padding:18px 20px;display:flex;flex-direction:column;a
 .tabs button{flex:1;border:2px solid var(--k);border-radius:99px;padding:6px;font-weight:700}
 .tabs button.on{background:var(--k);color:var(--w)}
 .hl{flex:1;overflow:auto;padding:8px 20px 20px}
-.hl img{width:100%;display:block;border:2px solid var(--k);border-radius:14px;margin:8px 0 14px;background:#fff}
+.hl img{width:100%;display:block;border:2px solid var(--k);border-radius:14px;margin:8px 0 14px;background:var(--w)}
 .rf{display:flex;gap:10px;padding:12px 20px calc(12px + env(safe-area-inset-bottom,0px));border-top:2px solid var(--k)}
 .rf:empty{display:none}
 .rf .go{flex:1;width:auto}
@@ -144,7 +144,7 @@ const cat=id=>{const c=S.cats.find(c=>c.id===id)||{name:'Deleted',color:'#868e96
 const uid=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 const monthName=(y,m)=>new Date(y,m,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
 const T=new Date();let vy=T.getFullYear(),vm=T.getMonth(),sel=null,hTab='d',pc=COLORS[0],pickedCat=null;
-let mode='m',dOff=0; /* mode: 'm' = pie shows the month, 'd' = pie shows one day; dOff = days back from today */
+let mode='d',dOff=0; /* mode: 'm' = pie shows the month, 'd' = pie shows one day; dOff = days back from today. Default on load: today */
 const dayStart=o=>{const n=new Date();return new Date(n.getFullYear(),n.getMonth(),n.getDate()-o)};
 const sameDay=(ts,d)=>{const x=new Date(ts);return x.getFullYear()===d.getFullYear()&&x.getMonth()===d.getMonth()&&x.getDate()===d.getDate()};
 const maxBack=()=>{if(!S.exp.length)return 0;const m=S.exp.reduce((a,e)=>Math.min(a,e.ts),Infinity),f=new Date(m);return Math.max(0,Math.round((dayStart(0)-new Date(f.getFullYear(),f.getMonth(),f.getDate()))/864e5))};
@@ -401,9 +401,12 @@ async function makeReport(){
 
 function drawReport(r){
   const W=1080,P=64,CW=W-2*P,FF='system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
-  const INK='#111111',MUT='#6b6b6b',SOFT='#efefef',LINE='#e3e3e3';
+  /* report follows the app theme at the moment it is generated */
+  const DARK=document.documentElement.dataset.theme==='dark';
+  const BG=DARK?'#000000':'#ffffff';
+  const INK=DARK?'#ffffff':'#111111',MUT=DARK?'#9a9a9a':'#6b6b6b',SOFT=DARK?'#242424':'#efefef',LINE=DARK?'#2e2e2e':'#e3e3e3';
   const f=(w,s)=>`${w} ${s}px ${FF}`;
-  const cc=id=>{const c=S.cats.find(x=>x.id===id)||{name:'Deleted',color:'#868e96'};return{name:c.name,color:lum(c.color)>.88?'#000000':c.color}};
+  const cc=id=>{const c=S.cats.find(x=>x.id===id)||{name:'Deleted',color:'#868e96'};const l=lum(c.color);return{name:c.name,color:DARK?(l<.18?'#ffffff':c.color):(l>.88?'#000000':c.color)}};
   const fit=(g,t,maxW)=>{if(g.measureText(t).width<=maxW)return t;while(t.length>1&&g.measureText(t+'…').width>maxW)t=t.slice(0,-1);return t+'…'};
   const shrink=(g,t,w,size,maxW)=>{while(size>18){g.font=f(w,size);if(g.measureText(t).width<=maxW)break;size-=2}g.font=f(w,size)};
   const rr=(g,x,y,w,h,rad)=>{g.beginPath();g.moveTo(x+rad,y);g.arcTo(x+w,y,x+w,y+h,rad);g.arcTo(x+w,y+h,x,y+h,rad);g.arcTo(x,y+h,x,y,rad);g.arcTo(x,y,x+w,y,rad);g.closePath()};
@@ -524,7 +527,7 @@ function drawReport(r){
     const ch=P+pg.reduce((s,it)=>s+it.h,0)+FOOT;
     const c=document.createElement('canvas');c.width=W;c.height=ch;
     const g=c.getContext('2d');
-    g.fillStyle='#ffffff';g.fillRect(0,0,W,ch);
+    g.fillStyle=BG;g.fillRect(0,0,W,ch);
     g.textBaseline='alphabetic';g.textAlign='left';
     let y=P;
     pg.forEach(it=>{g.save();it.draw(g,y);g.restore();y+=it.h});
