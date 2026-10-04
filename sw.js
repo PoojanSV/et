@@ -16,7 +16,7 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
-      .then(ks => Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k))))
+      .then(ks => Promise.all(ks.filter(k => k !== V && k !== 'et-shared').map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -24,9 +24,21 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const r = e.request, u = new URL(r.url);
 
-  /* an image was shared to the app: open it on the "Add expense" sheet */
+  /* an image was shared to the app: cache it and open the "Add expense" sheet */
   if (r.method === 'POST' && u.pathname.endsWith('/share-target')) {
-    e.respondWith(Response.redirect(new URL('./?shared=1', self.registration.scope).href, 303));
+    e.respondWith((async () => {
+      try {
+        const data = await r.formData();
+        const file = data.get('image');
+        if (file) {
+          const cache = await caches.open('et-shared');
+          await cache.put('/__shared-image', new Response(file, {
+            headers: { 'content-type': file.type || 'image/jpeg' }
+          }));
+        }
+      } catch (err) {}
+      return Response.redirect(new URL('./?shared=1', self.registration.scope).href, 303);
+    })());
     return;
   }
 
