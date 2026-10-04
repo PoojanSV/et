@@ -5,9 +5,6 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Expense Tracker</title>
 <link rel="icon" type="image/png" id="fav" href="logol.png">
-<link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <script>/* favicon follows the browser/OS theme (that's what the tab bar uses): logol.png = light, logod.png = dark */
 (function(){var q=window.matchMedia&&matchMedia('(prefers-color-scheme:dark)');
 function set(){var o=document.getElementById('fav'),l=document.createElement('link');
@@ -197,10 +194,8 @@ function toMonth(){if(mode!=='m'||dOff){mode='m';dOff=0;sel=null;render()}}
 function pickRow(id){const was=mode==='m';mode='m';dOff=0;sel=was&&sel===id?null:id;render()}
 
 /* sheets */
-const OCR={msg:'',id:0,busy:false};   /* status line under the amount field while a screenshot is read */
-function ocrSay(m){OCR.msg=m;const e=$('ocrs');if(e){e.textContent=m;e.hidden=!m}}
 function showSheet(h){$('sh').innerHTML=h;$('ov').classList.add('show')}
-function closeSheet(){rmMode=false;OCR.msg='';OCR.id++;$('ov').classList.remove('show')}
+function closeSheet(){rmMode=false;$('ov').classList.remove('show')}
 
 /* confirm before anything is removed */
 let cfFn=null;
@@ -216,14 +211,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('cf').classList.c
 function openExp(){
   if(!S.cats.length){openCat();return}
   if(!S.cats.find(c=>c.id===pickedCat))pickedCat=S.cats[0].id;
-  showSheet(`<div style="display:flex;gap:10px;align-items:center;width:100%">
-      <input class="in amt" id="a" type="number" inputmode="decimal" step="any" min="0" placeholder="₹0" onkeydown="if(event.key==='Enter')addExp()" style="flex:1;min-width:0">
-      <input type="file" id="scan-img" accept="image/*" capture="environment" hidden onchange="if(this.files[0])processImageBlob(this.files[0])">
-      <button type="button" class="rb" style="width:50px;height:50px;flex:none" title="Scan receipt / screenshot" onclick="$('scan-img').click()" aria-label="Scan receipt">
-        <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke-linejoin="round"/><circle cx="12" cy="13" r="4"/></svg>
-      </button>
-    </div>
-    <div class="st" id="ocrs"${OCR.msg?'':' hidden'}>${esc(OCR.msg)}</div>
+  showSheet(`<input class="in amt" id="a" type="number" inputmode="decimal" step="any" min="0" placeholder="₹0" onkeydown="if(event.key==='Enter')addExp()">
     <div class="chips">${S.cats.map(c=>`<button class="chip ${c.id===pickedCat?'on':''}" onclick="pickCat('${c.id}')"><i class="dot" style="background:${col(c.color)}"></i>${esc(c.name)}</button>`).join('')}</div>
     <input class="in" id="n" placeholder="Note" maxlength="60" onkeydown="if(event.key==='Enter')addExp()">
     <button class="go" onclick="addExp()">Add</button>`);
@@ -624,240 +612,6 @@ function delExp(id){
   ask(e?`Delete this ${fmt(e.amt)} expense?`:'Delete this expense?',()=>{S.exp=S.exp.filter(x=>x.id!==id);save();render();hist()});
 }
 
-/* screenshot / receipt -> amount. Runs locally with Tesseract.js */
-const OCRD = new URL('./', location.href).href;
-
-async function ocrWorker() {
-  if (!window.Tesseract) {
-    await new Promise((ok, no) => {
-      const s = document.createElement('script');
-      s.src = OCRD + 'tesseract.min.js';
-      s.onload = ok;
-      s.onerror = () => no(new Error('Failed to load tesseract.min.js. Ensure the app is served via a local web server (http://), not file://.'));
-      document.head.appendChild(s);
-    });
-  }
-  return Tesseract.createWorker('eng', 1, {
-    workerPath: OCRD + 'worker.min.js',
-    corePath: OCRD,
-    langPath: OCRD,
-    gzip: true
-  });
-}
-
-function ocrWords(data) {
-  const o = [];
-  (data.blocks || []).forEach(b => {
-    (b.paragraphs || []).forEach(p => {
-      (p.lines || []).forEach(l => {
-        (l.words || []).forEach(w => {
-          if (w && w.text) o.push(w);
-        });
-      });
-    });
-  });
-  return o;
-}
-
-/* Extracts ONLY the amount that appears directly after a Rupee symbol (₹, Rs, Rs., INR) */
-function extractRupeeAmount(words, fullText, H) {
-  const candidates = [];
-  const RUPEE_SYM_RE = /^(?:[₹\u20B9]|rs\.?|inr)$/i;
-  const RUPEE_PREFIX_RE = /^(?:[₹\u20B9]|(?:\b|^)(?:rs\.?|inr)[\s.:]*)\s*(\d[\d,]*(?:\.\d{1,2})?)$/i;
-
-  // 1. Scan word-level tokens (gives exact bounding box and font height)
-  if (Array.isArray(words)) {
-    words.forEach((w, i) => {
-      const text = (w.text || '').trim();
-      const hg = (w.bbox && w.bbox.y1 && w.bbox.y0) ? (w.bbox.y1 - w.bbox.y0) : 20;
-      const y0 = (w.bbox && w.bbox.y0) || 0;
-
-      // Case A: Rupee symbol is directly attached to the number: e.g. "₹500", "Rs.250", "₹1,250.00"
-      const mPrefix = RUPEE_PREFIX_RE.exec(text);
-      if (mPrefix) {
-        const rawNum = mPrefix[1].replace(/,/g, '');
-        const val = parseFloat(rawNum);
-        if (val > 0 && rawNum.length <= 8) {
-          candidates.push({ val, hg, y0, text });
-          return;
-        }
-      }
-
-      // Case B: Word is a number, and the previous word was the Rupee symbol: e.g. ["₹", "500"] or ["Rs.", "450"]
-      const mNum = /^(\d[\d,]*(?:\.\d{1,2})?)$/.exec(text);
-      if (mNum && i > 0) {
-        const prev = words[i - 1];
-        const prevText = (prev.text || '').trim();
-        const sameLine = !prev.bbox || Math.abs(prev.bbox.y1 - w.bbox.y1) < Math.max(hg, 20) * 0.8;
-        if (RUPEE_SYM_RE.test(prevText) && sameLine) {
-          const rawNum = mNum[1].replace(/,/g, '');
-          const val = parseFloat(rawNum);
-          if (val > 0 && rawNum.length <= 8) {
-            candidates.push({ val, hg, y0, text: prevText + ' ' + text });
-            return;
-          }
-        }
-      }
-    });
-  }
-
-  // 2. Scan full OCR text specifically for numbers right after Rupee symbols
-  const textToScan = fullText || (words || []).map(w => w.text || '').join(' ');
-  const regex = /(?:[₹\u20B9]|(?:\b|^)(?:rs\.?|inr)[\s.:]*)\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)/gi;
-  let match;
-  while ((match = regex.exec(textToScan)) !== null) {
-    const raw = match[1].replace(/,/g, '');
-    const val = parseFloat(raw);
-    if (val > 0 && raw.length <= 8) {
-      if (!candidates.find(c => Math.abs(c.val - val) < 0.001)) {
-        candidates.push({ val, hg: 20, y0: 0, text: match[0] });
-      }
-    }
-  }
-
-  // 3. Fallback: Sometimes Tesseract OCR reads the "₹" glyph as "?" before a number: e.g. "? 500" or "?500"
-  if (!candidates.length) {
-    const qRegex = /(?:^|\s)\?\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)/g;
-    while ((match = qRegex.exec(textToScan)) !== null) {
-      const raw = match[1].replace(/,/g, '');
-      const val = parseFloat(raw);
-      if (val > 0 && raw.length <= 8) {
-        candidates.push({ val, hg: 20, y0: 0, text: match[0] });
-      }
-    }
-  }
-
-  if (!candidates.length) return null;
-
-  // Primary: largest font height (the headline transaction amount)
-  // Secondary: topmost on screen
-  candidates.sort((a, b) => b.hg - a.hg || a.y0 - b.y0);
-
-  const best = candidates[0].val;
-  return Math.round(best * 100) / 100;
-}
-
-async function amountFromImage(blob) {
-  let bmp;
-  try {
-    bmp = await createImageBitmap(blob);
-  } catch (e) {
-    bmp = await new Promise((ok, no) => {
-      const img = new Image();
-      img.onload = () => ok(img);
-      img.onerror = no;
-      img.src = URL.createObjectURL(blob);
-    });
-  }
-  const width = bmp.naturalWidth || bmp.width;
-  const height = bmp.naturalHeight || bmp.height;
-  const k = width > 1200 ? 1200 / width : (width < 600 ? 2 : 1);
-  const w = Math.round(width * k), h = Math.round(height * k);
-  const cv = document.createElement('canvas');
-  cv.width = w; cv.height = h;
-  const g = cv.getContext('2d', { willReadFrequently: true });
-  g.drawImage(bmp, 0, 0, w, h);
-  if (bmp.close) bmp.close();
-  const im = g.getImageData(0, 0, w, h), d = im.data;
-  let sum = 0;
-  for (let i = 0; i < d.length; i += 4) {
-    const y = .299 * d[i] + .587 * d[i + 1] + .114 * d[i + 2];
-    d[i] = d[i + 1] = d[i + 2] = y;
-    sum += y;
-  }
-  if (sum / (d.length / 4) < 110) {
-    for (let i = 0; i < d.length; i += 4) d[i] = d[i + 1] = d[i + 2] = 255 - d[i];
-  }
-  g.putImageData(im, 0, 0);
-
-  const wk = await ocrWorker();
-  try {
-    await wk.setParameters({ tessedit_pageseg_mode: '11' });
-    const r = await Promise.race([
-      wk.recognize(cv, {}, { blocks: true, text: true }),
-      new Promise((_, no) => setTimeout(() => no(new Error('OCR recognition timed out')), 60000))
-    ]);
-    const words = ocrWords(r.data);
-    const fullText = (r.data && r.data.text) ? r.data.text : '';
-    return extractRupeeAmount(words, fullText, h);
-  } finally {
-    try { await wk.terminate(); } catch (e) {}
-  }
-}
-
-async function processImageBlob(blob) {
-  if (!blob) return;
-  if (location.protocol === 'file:') {
-    ocrSay('Notice: OCR requires a local web server (http://), not file://');
-    return;
-  }
-  const id = OCR.id;
-  OCR.busy = true;
-  ocrSay('Reading amount after Rupee symbol…');
-  let amt = null, ok = true;
-  try {
-    amt = await amountFromImage(blob);
-    try { localStorage.setItem('et-ocr-warm', '1'); } catch (e) {}
-  } catch (err) {
-    console.error('OCR error:', err);
-    ok = false;
-  }
-  OCR.busy = false;
-  if (id !== OCR.id || !$('ov').classList.contains('show')) return;
-  const a = $('a');
-  if (amt != null && a) {
-    a.value = String(amt);
-    if (a.select) a.select();
-    ocrSay('Extracted ' + fmt(amt) + ' (found after Rupee sign)');
-  } else {
-    ocrSay(ok ? "No amount found after Rupee (₹) symbol – type it in" : "Could not read image – type amount");
-  }
-}
-
-async function readShared(msgPromise) {
-  ocrSay('Looking for shared image…');
-  let blob = null;
-
-  // Primary path: wait up to 3 s for SW to postMessage the image buffer
-  try {
-    const result = await Promise.race([
-      msgPromise,
-      new Promise(res => setTimeout(() => res(null), 3000))
-    ]);
-    if (result && result.buffer && result.buffer.byteLength > 0) {
-      blob = new Blob([result.buffer], { type: result.mimeType || 'image/jpeg' });
-    }
-  } catch (e) { console.warn('postMessage path error:', e); }
-
-  // Fallback: poll the 'et-shared' cache for up to 2 more seconds
-  if (!blob || !blob.size) {
-    for (let i = 0; i < 14; i++) {
-      try {
-        const c = await caches.open('et-shared');
-        const res = await c.match('/__shared-image');
-        if (res) {
-          blob = await res.blob();
-          if (blob && blob.size > 0) { await c.delete('/__shared-image'); break; }
-        }
-      } catch (e) { console.warn('Cache poll error:', e); }
-      await new Promise(r => setTimeout(r, 150));
-    }
-  }
-
-  if (!blob || !blob.size) {
-    ocrSay("Couldn't retrieve shared image – tap 📷 to scan");
-    return;
-  }
-  await processImageBlob(blob);
-}
-
-function warmOcr() {
-  try {
-    if (OCR.busy || localStorage.getItem('et-ocr-warm') || navigator.onLine === false || (navigator.connection && navigator.connection.saveData)) return;
-    ocrWorker().then(w => { w.terminate(); localStorage.setItem('et-ocr-warm', '1'); }).catch(() => {});
-  } catch (e) {}
-}
-
 /* follow device theme live; the Settings toggle still works until the device theme changes */
 function syncSys(){
   const s=sysTheme();
@@ -878,43 +632,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncSys()}
 window.addEventListener('pageshow',syncSys);
 window.addEventListener('focus',syncSys);
 
-/* installable app: service worker (offline + receives images shared from other apps, e.g. GPay) */
-if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
-  window.addEventListener('load',()=>{
-    try{
-      navigator.serviceWorker.register('sw.js').then(reg=>{
-        if(reg && reg.update) reg.update();
-        setTimeout(warmOcr,8000);
-      }).catch(()=>{});
-    }catch(e){}
-  });
-}
-
 render();
-
-/* opened via the Android share sheet -> go straight to Add expense */
-function checkSharedLaunch() {
-  if (!(/[?&]shared(=|&|$)/.test(location.search))) return;
-  try { history.replaceState(null, '', location.pathname); } catch (e) {}
-
-  // Set up the message listener BEFORE opening the sheet so we don't miss a fast delivery
-  let _resolveMsgPromise;
-  const msgPromise = new Promise(res => { _resolveMsgPromise = res; });
-  function onSwMsg(evt) {
-    if (evt.data && evt.data.type === 'SHARED_IMAGE') {
-      navigator.serviceWorker.removeEventListener('message', onSwMsg);
-      _resolveMsgPromise(evt.data);
-    }
-  }
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.addEventListener('message', onSwMsg);
-  }
-
-  openExp();
-  readShared(msgPromise);
-}
-checkSharedLaunch();
-window.addEventListener('pageshow', checkSharedLaunch);
 </script>
 </body>
 </html>
