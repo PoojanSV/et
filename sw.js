@@ -1,6 +1,6 @@
 /* Expense Tracker service worker
    1) lets the app appear in Android's share list for images (manifest "share_target")
-   2) keeps the app working offline */
+   2) keeps the app working offline */ 
 const V = 'expense-tracker-sw-v2';
 const ASSETS = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png',
   'AppLogoLight.png', 'AppLogoDark.jpeg', 'logol.png', 'logod.png'];
