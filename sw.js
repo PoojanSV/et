@@ -1,7 +1,7 @@
 /* Expense Tracker service worker
    1) lets the app appear in Android's share list for images (manifest "share_target")
-   2) keeps the app working offline */ 
-const V = 'expense-tracker-sw-v2';
+   2) keeps the app working offline */
+const V = 'expense-tracker-sw-v3';
 const ASSETS = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png',
   'AppLogoLight.png', 'AppLogoDark.jpeg', 'logol.png', 'logod.png'];
 
@@ -24,32 +24,40 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const r = e.request, u = new URL(r.url);
 
-  /* an image was shared to the app: cache it and open the "Add expense" sheet */
+  /* an image was shared to the app: read it, relay to all clients, then redirect */
   if (r.method === 'POST' && (u.pathname.includes('share-target') || u.pathname.endsWith('share-target'))) {
     e.respondWith((async () => {
       try {
         const data = await r.formData();
-        let file = data.get('image');
-        if (!file || typeof file === 'string' || !file.size) {
-          for (const [k, v] of data.entries()) {
-            if (v && typeof v === 'object' && v.size > 0) {
-              file = v;
-              break;
-            }
+        let file = null, mimeType = 'image/jpeg';
+        // Try common field names first, then fall back to any Blob
+        for (const key of ['image', 'media', 'file', 'files']) {
+          const v = data.get(key);
+          if (v && typeof v === 'object' && v.size > 0) { file = v; break; }
+        }
+        if (!file) {
+          for (const [, v] of data.entries()) {
+            if (v && typeof v === 'object' && v.size > 0) { file = v; break; }
           }
         }
         if (file && typeof file.arrayBuffer === 'function') {
+          mimeType = file.type || 'image/jpeg';
           const buf = await file.arrayBuffer();
-          const cache = await caches.open('et-shared');
-          const resp = new Response(buf, {
-            headers: {
-              'content-type': file.type || 'image/jpeg',
-              'content-length': String(buf.byteLength)
-            }
-          });
-          await cache.put('/__shared-image', resp.clone());
-          const scopeUrl = new URL('./__shared-image', self.registration.scope).href;
-          await cache.put(scopeUrl, resp);
+          // 1) Write to cache as a backup path
+          try {
+            const cache = await caches.open('et-shared');
+            await cache.delete('/__shared-image');       // clear stale entry
+            await cache.put('/__shared-image', new Response(buf, {
+              headers: { 'content-type': mimeType, 'content-length': String(buf.byteLength) }
+            }));
+          } catch (_) {}
+          // 2) PRIMARY path: postMessage the buffer to every open client
+          const clients = await self.clients.matchAll({ includeUncontrolled: true, type: 'window' });
+          for (const client of clients) {
+            try {
+              client.postMessage({ type: 'SHARED_IMAGE', mimeType, buffer: buf }, [buf]);
+            } catch (_) {}
+          }
         }
       } catch (err) {
         console.error('Service worker share-target error:', err);
