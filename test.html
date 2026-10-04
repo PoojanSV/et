@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Expense Tracker</title>
 <link rel="icon" type="image/png" id="fav" href="logol.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <script>/* favicon follows the browser/OS theme (that's what the tab bar uses): logol.png = light, logod.png = dark */
 (function(){var q=window.matchMedia&&matchMedia('(prefers-color-scheme:dark)');
 function set(){var o=document.getElementById('fav'),l=document.createElement('link');
@@ -632,7 +635,18 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncSys()}
 window.addEventListener('pageshow',syncSys);
 window.addEventListener('focus',syncSys);
 
+/* installable app: service worker (offline + receives images shared from other apps, e.g. GPay) */
+if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){
+  window.addEventListener('load',()=>{try{navigator.serviceWorker.register('sw.js').catch(()=>{})}catch(e){}});
+}
+
 render();
+
+/* opened via the Android share sheet -> go straight to Add expense */
+if(/[?&]shared=1(&|$)/.test(location.search)){
+  try{history.replaceState(null,'',location.pathname)}catch(e){}
+  openExp();
+}
 </script>
 </body>
 </html>
