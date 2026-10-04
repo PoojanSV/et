@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Expense Tracker</title>
 <link rel="icon" type="image/png" id="fav" href="logol.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <script>/* favicon follows the browser/OS theme (that's what the tab bar uses): logol.png = light, logod.png = dark */
 (function(){var q=window.matchMedia&&matchMedia('(prefers-color-scheme:dark)');
 function set(){var o=document.getElementById('fav'),l=document.createElement('link');
@@ -194,8 +197,10 @@ function toMonth(){if(mode!=='m'||dOff){mode='m';dOff=0;sel=null;render()}}
 function pickRow(id){const was=mode==='m';mode='m';dOff=0;sel=was&&sel===id?null:id;render()}
 
 /* sheets */
+const OCR={msg:'',id:0,busy:false};   /* status line under the amount field while a shared screenshot is read */
+function ocrSay(m){OCR.msg=m;const e=$('ocrs');if(e){e.textContent=m;e.hidden=!m}}
 function showSheet(h){$('sh').innerHTML=h;$('ov').classList.add('show')}
-function closeSheet(){rmMode=false;$('ov').classList.remove('show')}
+function closeSheet(){rmMode=false;OCR.msg='';OCR.id++;$('ov').classList.remove('show')}
 
 /* confirm before anything is removed */
 let cfFn=null;
@@ -212,6 +217,7 @@ function openExp(){
   if(!S.cats.length){openCat();return}
   if(!S.cats.find(c=>c.id===pickedCat))pickedCat=S.cats[0].id;
   showSheet(`<input class="in amt" id="a" type="number" inputmode="decimal" step="any" min="0" placeholder="₹0" onkeydown="if(event.key==='Enter')addExp()">
+    <div class="st" id="ocrs"${OCR.msg?'':' hidden'}>${esc(OCR.msg)}</div>
     <div class="chips">${S.cats.map(c=>`<button class="chip ${c.id===pickedCat?'on':''}" onclick="pickCat('${c.id}')"><i class="dot" style="background:${col(c.color)}"></i>${esc(c.name)}</button>`).join('')}</div>
     <input class="in" id="n" placeholder="Note" maxlength="60" onkeydown="if(event.key==='Enter')addExp()">
     <button class="go" onclick="addExp()">Add</button>`);
@@ -582,6 +588,81 @@ function drawReport(r,a4){
   });
 }
 
+/* screenshot -> amount. Runs on the phone (Tesseract.js, files in /ocr), nothing is uploaded */
+const OCRD=new URL('ocr/',location.href).href;
+async function ocrWorker(){
+  if(!window.Tesseract)await new Promise((ok,no)=>{const s=document.createElement('script');s.src=OCRD+'tesseract.min.js';s.onload=ok;s.onerror=no;document.head.appendChild(s)});
+  return Tesseract.createWorker('eng',1,{workerPath:OCRD+'worker.min.js',corePath:OCRD,langPath:OCRD,gzip:true});
+}
+function ocrWords(data){const o=[];(data.blocks||[]).forEach(b=>b.paragraphs.forEach(p=>p.lines.forEach(l=>l.words.forEach(w=>o.push(w)))));return o}
+/* the headline amount is the biggest number on the screen; dates, times, phone numbers and IDs are ignored */
+function pickAmount(words,H){
+  const MON=/^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[.,]?$/i,CUR=/^(rs\.?|inr|[^\w\s]{1,2})$/i,c=[];
+  words.forEach((w,i)=>{
+    const t=(w.text||'').trim(),m=/^([^\d\s]{0,2})(\d[\d,]*)(\.\d{1,2})?$/.exec(t);
+    if(!m||!/^(\d{1,3}(,\d{2,3})+|\d+)$/.test(m[2])||m[2].replace(/,/g,'').length>7)return;
+    const hg=w.bbox.y1-w.bbox.y0,pv=words[i-1],nx=words[i+1];
+    if(w.bbox.y0<H*.04||hg<12)return;                                                  /* status bar, specks */
+    if((pv&&MON.test(pv.text.trim()))||(nx&&MON.test(nx.text.trim())))return;          /* dates */
+    const cur=!!m[1]||!!(pv&&CUR.test(pv.text.trim())&&Math.abs(pv.bbox.y1-w.bbox.y1)<hg*.5);
+    c.push({i,w,hg,cur,ds:m[2],dec:m[3]||'',score:hg*(cur?1.25:1)});
+  });
+  if(!c.length)return null;
+  c.sort((a,b)=>b.score-a.score||a.w.bbox.y0-b.w.bbox.y0);
+  let b=c[0];
+  /* a lone digit just left of a same-height number is the rupee sign misread: use the number */
+  const r=c.find(x=>x.i===b.i+1&&Math.abs(x.hg-b.hg)<b.hg*.25);
+  if(r&&b.ds.length===1)b=r;
+  let ds=b.ds;
+  /* OCR often reads the rupee sign as a digit. Dropped signs get merged into the next digit's box (box ~2x wide);
+     a digit with a normal-width box is the misread sign itself, so remove it */
+  const s0=b.w.symbols&&b.w.symbols[0];
+  if(!b.cur&&s0&&/\d/.test(s0.text)&&b.ds.replace(/,/g,'').length>1){
+    const ratio=(s0.bbox.x1-s0.bbox.x0)/Math.max(1,s0.bbox.y1-s0.bbox.y0);
+    if(ratio<1.25)ds=ds.slice(1).replace(/^,/,'');
+  }
+  const v=parseFloat(ds.replace(/,/g,'')+b.dec);
+  return v>0?Math.round(v*100)/100:null;
+}
+async function amountFromImage(blob){
+  const bmp=await createImageBitmap(blob),k=bmp.width>1000?1000/bmp.width:(bmp.width<700?2:1);   /* sensible text size, fast */
+  const w=Math.round(bmp.width*k),h=Math.round(bmp.height*k),cv=document.createElement('canvas');
+  cv.width=w;cv.height=h;
+  const g=cv.getContext('2d',{willReadFrequently:true});g.drawImage(bmp,0,0,w,h);if(bmp.close)bmp.close();
+  const im=g.getImageData(0,0,w,h),d=im.data;let sum=0;
+  for(let i=0;i<d.length;i+=4){const y=.299*d[i]+.587*d[i+1]+.114*d[i+2];d[i]=d[i+1]=d[i+2]=y;sum+=y}
+  if(sum/(d.length/4)<110)for(let i=0;i<d.length;i+=4)d[i]=d[i+1]=d[i+2]=255-d[i];   /* dark mode -> dark text on light */
+  g.putImageData(im,0,0);
+  const wk=await ocrWorker();
+  try{
+    await wk.setParameters({tessedit_pageseg_mode:'11'});   /* sparse text: how app screens are laid out */
+    const r=await Promise.race([wk.recognize(cv,{},{blocks:true}),new Promise((_,no)=>setTimeout(()=>no(new Error('timeout')),60000))]);
+    return pickAmount(ocrWords(r.data),h);
+  }finally{try{wk.terminate()}catch(e){}}
+}
+async function readShared(){
+  let blob=null;
+  try{const c=await caches.open('et-shared'),m=await c.match('/__shared-image');if(m){blob=await m.blob();await c.delete('/__shared-image')}}catch(e){}
+  if(!blob)return;
+  const id=OCR.id;OCR.busy=true;ocrSay('Reading amount from screenshot…');
+  let amt=null,ok=true;
+  try{amt=await amountFromImage(blob);try{localStorage.setItem('et-ocr-warm','1')}catch(e){}}catch(e){ok=false}
+  OCR.busy=false;
+  if(id!==OCR.id||!$('ov').classList.contains('show'))return;      /* sheet was closed meanwhile */
+  const a=$('a');
+  if(amt!=null&&a){
+    if(!a.value){a.value=String(amt);if(a.select)a.select();ocrSay('Amount read from screenshot – please check it')}
+    else ocrSay('Screenshot shows '+fmt(amt))
+  }else ocrSay(ok?"Couldn't find an amount – type it in":"Couldn't read the screenshot – type the amount");
+}
+/* quietly fetch the OCR files once (~7 MB) so the first shared screenshot is fast and works offline */
+function warmOcr(){
+  try{
+    if(OCR.busy||localStorage.getItem('et-ocr-warm')||navigator.onLine===false||(navigator.connection&&navigator.connection.saveData))return;
+    ocrWorker().then(w=>{w.terminate();localStorage.setItem('et-ocr-warm','1')}).catch(()=>{});
+  }catch(e){}
+}
+
 /* history */
 function openHist(){$('hist').classList.add('show');hist()}
 function closeHist(){$('hist').classList.remove('show')}
@@ -632,7 +713,19 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncSys()}
 window.addEventListener('pageshow',syncSys);
 window.addEventListener('focus',syncSys);
 
+/* installable app: service worker (offline + receives images shared from other apps, e.g. GPay) */
+if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){
+  window.addEventListener('load',()=>{try{navigator.serviceWorker.register('sw.js').then(()=>setTimeout(warmOcr,8000)).catch(()=>{})}catch(e){}});
+}
+
 render();
+
+/* opened via the Android share sheet -> go straight to Add expense */
+if(/[?&]shared=1(&|$)/.test(location.search)){
+  try{history.replaceState(null,'',location.pathname)}catch(e){}
+  openExp();
+  readShared();
+}
 </script>
 </body>
 </html>
