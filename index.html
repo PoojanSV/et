@@ -814,30 +814,37 @@ async function processImageBlob(blob) {
   }
 }
 
-async function readShared() {
+async function readShared(msgPromise) {
   ocrSay('Looking for shared image…');
   let blob = null;
-  for (let i = 0; i < 25; i++) {
-    try {
-      const c = await caches.open('et-shared');
-      const keys = await c.keys();
-      if (keys && keys.length > 0) {
-        for (const k of keys) {
-          const res = await c.match(k);
-          if (res) {
-            blob = await res.blob();
-            await c.delete(k);
-            if (blob && blob.size > 0) break;
-          }
-        }
-        if (blob && blob.size > 0) break;
-      }
-    } catch (e) {
-      console.warn('Cache check error:', e);
+
+  // Primary path: wait up to 3 s for SW to postMessage the image buffer
+  try {
+    const result = await Promise.race([
+      msgPromise,
+      new Promise(res => setTimeout(() => res(null), 3000))
+    ]);
+    if (result && result.buffer && result.buffer.byteLength > 0) {
+      blob = new Blob([result.buffer], { type: result.mimeType || 'image/jpeg' });
     }
-    await new Promise(r => setTimeout(r, 150));
+  } catch (e) { console.warn('postMessage path error:', e); }
+
+  // Fallback: poll the 'et-shared' cache for up to 2 more seconds
+  if (!blob || !blob.size) {
+    for (let i = 0; i < 14; i++) {
+      try {
+        const c = await caches.open('et-shared');
+        const res = await c.match('/__shared-image');
+        if (res) {
+          blob = await res.blob();
+          if (blob && blob.size > 0) { await c.delete('/__shared-image'); break; }
+        }
+      } catch (e) { console.warn('Cache poll error:', e); }
+      await new Promise(r => setTimeout(r, 150));
+    }
   }
-  if (!blob) {
+
+  if (!blob || !blob.size) {
     ocrSay("Couldn't retrieve shared image – tap 📷 to scan");
     return;
   }
@@ -887,11 +894,24 @@ render();
 
 /* opened via the Android share sheet -> go straight to Add expense */
 function checkSharedLaunch() {
-  if (/[?&]shared(=|&|$)/.test(location.search)) {
-    try { history.replaceState(null, '', location.pathname); } catch (e) {}
-    openExp();
-    readShared();
+  if (!(/[?&]shared(=|&|$)/.test(location.search))) return;
+  try { history.replaceState(null, '', location.pathname); } catch (e) {}
+
+  // Set up the message listener BEFORE opening the sheet so we don't miss a fast delivery
+  let _resolveMsgPromise;
+  const msgPromise = new Promise(res => { _resolveMsgPromise = res; });
+  function onSwMsg(evt) {
+    if (evt.data && evt.data.type === 'SHARED_IMAGE') {
+      navigator.serviceWorker.removeEventListener('message', onSwMsg);
+      _resolveMsgPromise(evt.data);
+    }
   }
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', onSwMsg);
+  }
+
+  openExp();
+  readShared(msgPromise);
 }
 checkSharedLaunch();
 window.addEventListener('pageshow', checkSharedLaunch);
