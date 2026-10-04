@@ -1,4 +1,4 @@
-/* Expense Tracker service worker
+/* Expense Tracker service worker 
    1) lets the app appear in Android's share list for images (manifest "share_target")
    2) keeps the app working offline */
 const V = 'expense-tracker-sw-v1';
