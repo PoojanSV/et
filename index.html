@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en"> 
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -776,15 +776,32 @@ async function processImageBlob(blob) {
 }
 
 async function readShared() {
+  ocrSay('Looking for shared image…');
   let blob = null;
-  try {
-    const c = await caches.open('et-shared'), m = await c.match('/__shared-image');
-    if (m) {
-      blob = await m.blob();
-      await c.delete('/__shared-image');
+  for (let i = 0; i < 25; i++) {
+    try {
+      const c = await caches.open('et-shared');
+      const keys = await c.keys();
+      if (keys && keys.length > 0) {
+        for (const k of keys) {
+          const res = await c.match(k);
+          if (res) {
+            blob = await res.blob();
+            await c.delete(k);
+            if (blob && blob.size > 0) break;
+          }
+        }
+        if (blob && blob.size > 0) break;
+      }
+    } catch (e) {
+      console.warn('Cache check error:', e);
     }
-  } catch (e) {}
-  if (!blob) return;
+    await new Promise(r => setTimeout(r, 150));
+  }
+  if (!blob) {
+    ocrSay("Couldn't retrieve shared image – tap 📷 to scan");
+    return;
+  }
   await processImageBlob(blob);
 }
 
@@ -817,17 +834,28 @@ window.addEventListener('focus',syncSys);
 
 /* installable app: service worker (offline + receives images shared from other apps, e.g. GPay) */
 if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
-  window.addEventListener('load',()=>{try{navigator.serviceWorker.register('sw.js').then(()=>setTimeout(warmOcr,8000)).catch(()=>{})}catch(e){}});
+  window.addEventListener('load',()=>{
+    try{
+      navigator.serviceWorker.register('sw.js').then(reg=>{
+        if(reg && reg.update) reg.update();
+        setTimeout(warmOcr,8000);
+      }).catch(()=>{});
+    }catch(e){}
+  });
 }
 
 render();
 
 /* opened via the Android share sheet -> go straight to Add expense */
-if(/[?&]shared=1(&|$)/.test(location.search)){
-  try{history.replaceState(null,'',location.pathname)}catch(e){}
-  openExp();
-  readShared();
+function checkSharedLaunch() {
+  if (/[?&]shared(=|&|$)/.test(location.search)) {
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
+    openExp();
+    readShared();
+  }
 }
+checkSharedLaunch();
+window.addEventListener('pageshow', checkSharedLaunch);
 </script>
 </body>
 </html>
