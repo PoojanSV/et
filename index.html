@@ -65,6 +65,9 @@ main{flex:1;overflow:auto;padding:18px 20px;display:flex;flex-direction:column;a
 .in{width:100%;border:2px solid var(--k);border-radius:14px;padding:12px 14px;background:var(--w);outline:0}
 .in[type=date]{min-height:50px}
 .in:focus{border-color:var(--blue)}
+.two{display:flex;gap:10px}
+.two #n{flex:1;min-width:0;width:auto}
+.two #d{flex:none;width:158px;padding-inline:10px}
 .amt{font-size:32px;font-weight:800}
 .lb{color:var(--mut);font-size:16px;font-weight:700;margin-bottom:-8px}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
@@ -102,7 +105,17 @@ main{flex:1;overflow:auto;padding:18px 20px;display:flex;flex-direction:column;a
 .rf{display:flex;flex-wrap:wrap;gap:10px;padding:12px 20px calc(12px + env(safe-area-inset-bottom,0px));border-top:2px solid var(--k)}
 .rf:empty{display:none}
 .rf .go{flex:1 1 40%;width:auto}
-.dh{display:flex;justify-content:space-between;font-weight:800;padding:14px 0 4px}
+.dh{display:flex;justify-content:space-between;gap:10px;font-weight:800;padding:8px 14px;margin:16px 0 2px;background:var(--soft);border-radius:14px}
+.dh+.it{border-top:0}
+.it.g,.it.mo{width:100%;text-align:left}
+.cv{width:32px;height:32px;display:grid;place-items:center;flex:none;color:var(--mut)}
+.cv svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;transition:transform .15s}
+.g.open .cv svg{transform:rotate(90deg)}
+.it.sub{padding:4px 0 4px 22px;border-top:0;color:var(--mut)}
+.sub .neg{font-weight:600;color:var(--k)}
+.it.mo{flex-wrap:wrap;row-gap:6px}
+.mo .tr{flex:0 0 100%;height:4px;border-radius:99px;background:var(--soft);overflow:hidden}
+.mo .tr i{display:block;height:100%;border-radius:99px;background:var(--k)}
 .it{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--soft)}
 .it .m{flex:1;min-width:0}
 .it small{color:var(--mut);display:block}
@@ -213,19 +226,25 @@ function openExp(){
   if(!S.cats.find(c=>c.id===pickedCat))pickedCat=S.cats[0].id;
   showSheet(`<input class="in amt" id="a" type="number" inputmode="decimal" step="any" min="0" placeholder="₹0" onkeydown="if(event.key==='Enter')addExp()">
     <div class="chips">${S.cats.map(c=>`<button class="chip ${c.id===pickedCat?'on':''}" onclick="pickCat('${c.id}')"><i class="dot" style="background:${col(c.color)}"></i>${esc(c.name)}</button>`).join('')}</div>
-    <input class="in" id="n" placeholder="Note" maxlength="60" onkeydown="if(event.key==='Enter')addExp()">
+    <div class="two"><input class="in" id="n" placeholder="Note" maxlength="60" onkeydown="if(event.key==='Enter')addExp()">
+    <input class="in" id="d" type="date" aria-label="Date" value="${iso(new Date())}" max="${iso(new Date())}" onkeydown="if(event.key==='Enter')addExp()"></div>
     <button class="go" onclick="addExp()">Add</button>`);
   setTimeout(()=>$('a').focus(),50);
 }
 function pickCat(id){
-  const a=$('a').value,n=$('n').value;pickedCat=id;openExp();$('a').value=a;$('n').value=n;
+  const a=$('a').value,n=$('n').value,d=$('d').value;pickedCat=id;openExp();$('a').value=a;$('n').value=n;$('d').value=d;
 }
 function addExp(){
   const amt=parseFloat($('a').value);
   if(!(amt>0)){$('a').focus();return}
-  S.exp.push({id:uid('e'),cat:pickedCat,amt:Math.round(amt*100)/100,note:$('n').value.trim(),ts:Date.now()});
+  /* chosen day (today or any past day), keeping the current time of day so entries stay in order */
+  const D=parseIso($('d').value),now=new Date();
+  if(!D||D>dayStart(0)){$('d').focus();return}
+  const ts=new Date(D.getFullYear(),D.getMonth(),D.getDate(),now.getHours(),now.getMinutes(),now.getSeconds(),now.getMilliseconds()).getTime();
+  S.exp.push({id:uid('e'),cat:pickedCat,amt:Math.round(amt*100)/100,note:$('n').value.trim(),ts});
   save();closeSheet();
-  const d=new Date();vy=d.getFullYear();vm=d.getMonth();mode='d';dOff=0;sel=null;render();
+  /* jump the pie to the day that was just added to */
+  vy=D.getFullYear();vm=D.getMonth();mode='d';dOff=Math.max(0,Math.round((dayStart(0)-D)/864e5));sel=null;render();
 }
 
 function openCat(){
@@ -585,24 +604,45 @@ function drawReport(r,a4){
 /* history */
 function openHist(){$('hist').classList.add('show');hist()}
 function closeHist(){$('hist').classList.remove('show')}
+const hOpen=new Set(); /* expanded clubbed rows (day|category) */
+const hTime=ts=>new Date(ts).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+function togG(k){hOpen.has(k)?hOpen.delete(k):hOpen.add(k);hist()}
 function hist(){
   let h=`<div class="hh"><span>History</span><button class="x" onclick="closeHist()" aria-label="Close">×</button></div>
   <div class="tabs"><button class="${hTab==='d'?'on':''}" onclick="hTab='d';hist()">Days</button><button class="${hTab==='m'?'on':''}" onclick="hTab='m';hist()">Months</button></div><div class="hl">`;
   const list=[...S.exp].sort((a,b)=>b.ts-a.ts);
-  if(hTab==='d'){
-    const totals={};list.forEach(e=>{const k=new Date(e.ts).toDateString();totals[k]=(totals[k]||0)+e.amt});
-    let last='';
+  if(!list.length)h+='<div class="st" style="padding:36px 0">No expenses yet</div>';
+  else if(hTab==='d'){
+    /* per day: expenses without a note are clubbed by category, expenses with a note stay on their own row */
+    const days=[];
     list.forEach(e=>{
-      const d=new Date(e.ts),k=d.toDateString();
-      if(k!==last){last=k;h+=`<div class="dh"><span>${d.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</span><span>${fmt(totals[k])}</span></div>`}
-      const c=cat(e.cat);
-      h+=`<div class="it"><i class="dot" style="background:${c.color}"></i><div class="m"><div>${esc(e.note||c.name)}</div><small>${esc(e.note?c.name+' · ':'')}${d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</small></div><span class="neg">${fmt(e.amt)}</span><button class="x" onclick="delExp('${e.id}')" aria-label="Delete">×</button></div>`;
+      const k=iso(new Date(e.ts));let d=days[days.length-1];
+      if(!d||d.k!==k){d={k,ts:e.ts,tot:0,rows:[],g:{}};days.push(d)}
+      d.tot+=e.amt;
+      if(e.note)d.rows.push({t:'n',e});
+      else{let g=d.g[e.cat];if(!g){g=d.g[e.cat]={t:'g',cat:e.cat,items:[],tot:0};d.rows.push(g)}g.items.push(e);g.tot+=e.amt}
+    });
+    const del=e=>`<button class="x" onclick="delExp('${e.id}')" aria-label="Delete">×</button>`;
+    days.forEach(d=>{
+      const dt=new Date(d.ts);
+      h+=`<div class="dh"><span>${dt.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'})}</span><span>${fmt(d.tot)}</span></div>`;
+      d.rows.forEach(r=>{
+        if(r.t==='g'&&r.items.length>1){
+          const c=cat(r.cat),k=d.k+'|'+r.cat,open=hOpen.has(k);
+          h+=`<button class="it g ${open?'open':''}" onclick="togG('${k}')" aria-expanded="${open}"><i class="dot" style="background:${c.color}"></i><span class="m"><span>${esc(c.name)}</span><small>${r.items.length} expenses</small></span><span class="neg">${fmt(r.tot)}</span><span class="cv"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span></button>`;
+          if(open)r.items.forEach(e=>{h+=`<div class="it sub"><div class="m">${hTime(e.ts)}</div><span class="neg">${fmt(e.amt)}</span>${del(e)}</div>`});
+        }else{
+          const e=r.t==='g'?r.items[0]:r.e,c=cat(e.cat);
+          h+=`<div class="it"><i class="dot" style="background:${c.color}"></i><div class="m"><div>${esc(e.note||c.name)}</div><small>${esc(e.note?c.name+' · ':'')}${hTime(e.ts)}</small></div><span class="neg">${fmt(e.amt)}</span>${del(e)}</div>`;
+        }
+      });
     });
   }else{
-    const m={};list.forEach(e=>{const d=new Date(e.ts),k=d.getFullYear()*12+d.getMonth();m[k]=(m[k]||0)+e.amt});
-    Object.keys(m).sort((a,b)=>b-a).forEach(k=>{
+    const m={},n={};list.forEach(e=>{const d=new Date(e.ts),k=d.getFullYear()*12+d.getMonth();m[k]=(m[k]||0)+e.amt;n[k]=(n[k]||0)+1});
+    const keys=Object.keys(m).sort((a,b)=>b-a),mx=Math.max(...keys.map(k=>m[k]));
+    keys.forEach(k=>{
       const y=Math.floor(k/12),mo=k%12;
-      h+=`<button class="it" style="width:100%;text-align:left" onclick="vy=${y};vm=${mo};mode='m';dOff=0;sel=null;closeHist();render()"><span class="m"><b>${monthName(y,mo)}</b></span><span class="neg">${fmt(m[k])}</span></button>`;
+      h+=`<button class="it mo" onclick="vy=${y};vm=${mo};mode='m';dOff=0;sel=null;closeHist();render()"><span class="m"><b>${monthName(y,mo)}</b><small>${n[k]} expense${n[k]>1?'s':''}</small></span><span class="neg">${fmt(m[k])}</span><span class="tr"><i style="width:${Math.max(2,m[k]/mx*100)}%"></i></span></button>`;
     });
   }
   $('hist').innerHTML=h+'</div>';
