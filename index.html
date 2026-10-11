@@ -120,6 +120,13 @@ main{flex:1;overflow:auto;padding:18px 20px;display:flex;flex-direction:column;a
 .it .m{flex:1;min-width:0}
 .it small{color:var(--mut);display:block}
 .neg{font-weight:700}
+.pos{color:var(--green)}
+.seg button.on.inc{background:var(--green);border-color:var(--green);color:#fff}
+.bal{display:flex;justify-content:space-around;flex-wrap:wrap;gap:2px 14px;margin:-2px 0 8px;color:var(--mut);font-size:16px;text-align:center}
+.bal b{font-weight:800}
+.x.ed{color:var(--mut);display:grid;place-items:center}
+.ed svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.it.editing{background:var(--soft);border-radius:12px;padding-inline:8px}
 </style>
 </head>
 <body>
@@ -133,7 +140,7 @@ main{flex:1;overflow:auto;padding:18px 20px;display:flex;flex-direction:column;a
   </main>
   <div class="bar">
     <button class="rb" title="Add category" onclick="openCat()"><svg viewBox="0 0 24 24"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1" fill="currentColor"/></svg></button>
-    <button class="rb big" title="Add expense" onclick="openExp()"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button class="rb big" title="Add expense or income" onclick="openExp()"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
     <button class="rb" title="History" onclick="openHist()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/></svg></button>
   </div>
   <div class="ov" id="ov" onclick="if(event.target===this)closeSheet()"><div class="sh" id="sh"></div></div>
@@ -152,12 +159,13 @@ if(!S||!Array.isArray(S.cats)||!Array.isArray(S.exp))S={cats:[
   {id:'c3',name:'Bills',color:COLORS[2]},{id:'c4',name:'Other',color:COLORS[5]}],exp:[]};
 if(!Array.isArray(S.colors))S.colors=[];
 if(!Array.isArray(S.hidden))S.hidden=[];
-let rmMode=false;
+let rmMode=false,editId=null,addInc=false; /* editId = category being edited; addInc = add sheet is in Income mode */
 const palette=()=>COLORS.filter(c=>!S.hidden.includes(c)).concat(S.colors);
 const save=()=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const fmt=n=>'₹'+n.toLocaleString('en-IN',{maximumFractionDigits:2});
+const fmt=n=>(n<0?'-':'')+'₹'+Math.abs(n).toLocaleString('en-IN',{maximumFractionDigits:2});
+const sumAmt=l=>l.reduce((a,e)=>a+e.amt,0);
 const lum=c=>{const n=parseInt(c.slice(1),16);return(.299*(n>>16)+.587*(n>>8&255)+.114*(n&255))/255};
 const col=c=>{const d=document.documentElement.dataset.theme==='dark',l=lum(c);return d&&l<.18?'#ffffff':!d&&l>.88?'#000000':c};
 const cat=id=>{const c=S.cats.find(c=>c.id===id)||{name:'Deleted',color:'#868e96'};return{...c,color:col(c.color)}};
@@ -176,8 +184,9 @@ const inMonth=e=>{const d=new Date(e.ts);return d.getFullYear()===vy&&d.getMonth
 
 function render(){
   const mx=maxBack();if(dOff>mx)dOff=mx;
-  const D=dayStart(dOff),dl=S.exp.filter(e=>sameDay(e.ts,D)),dTot=dl.reduce((a,e)=>a+e.amt,0);
-  const me=S.exp.filter(inMonth),mTot=me.reduce((a,e)=>a+e.amt,0),mRows=sums(me);
+  /* income entries (inc:true) are kept out of the pie and category totals; they only add to the income / balance lines */
+  const D=dayStart(dOff),dAll=S.exp.filter(e=>sameDay(e.ts,D)),dl=dAll.filter(e=>!e.inc),dTot=sumAmt(dl),dInc=sumAmt(dAll.filter(e=>e.inc));
+  const mAll=S.exp.filter(inMonth),me=mAll.filter(e=>!e.inc),mTot=sumAmt(me),mInc=sumAmt(mAll.filter(e=>e.inc)),mRows=sums(me);
   const tot=mode==='d'?dTot:mTot,rows=mode==='d'?sums(dl):mRows;
   if(sel&&!rows.find(r=>r.id===sel))sel=null;
   const C=2*Math.PI*80;let acc=0,seg='';
@@ -193,12 +202,12 @@ function render(){
   if(sel){
     const r=rows.find(x=>x.id===sel);
     mid=`<i style="background:${cat(sel).color}"></i>${esc(cat(sel).name)} <b>${fmt(r.v)}</b> ${Math.round(r.v/tot*100)}%`+(mode==='d'?`<small>${dayLabel(dOff)}</small>`:'');
-  }else mid=`${dayLabel(dOff)} <b>${fmt(dTot)}</b>`;
+  }else mid=`${dayLabel(dOff)} <b>${fmt(dTot)}</b>`+(dInc>0?`<small class="pos">+${fmt(dInc)} income</small>`:'');
   $('pill').innerHTML=pn('day(1)',dOff>=mx,'Previous day','‹')+`<div class="mid">${mid}</div>`+pn('day(-1)',dOff<=0,'Next day','›');
 
   const atNow=vy===new Date().getFullYear()&&vm===new Date().getMonth();
   $('month').innerHTML=`<div class="nav"><button onclick="step(-1)" aria-label="Previous month">‹</button><span>${monthName(vy,vm)}</span><button onclick="step(1)" aria-label="Next month" ${atNow?'disabled':''}>›</button></div>
-    <div class="tot">${fmt(mTot)}</div>`+mRows.map(r=>`<button class="row" onclick="pickRow('${r.id}')"><i class="dot" style="background:${cat(r.id).color}"></i><span>${esc(cat(r.id).name)}</span><b>${fmt(r.v)}</b></button>`).join('');
+    <div class="tot">${fmt(mTot)}</div>`+(mInc>0?`<div class="bal"><span>Income <b class="pos">+${fmt(mInc)}</b></span><span>Balance <b ${mInc-mTot<0?'style="color:var(--red)"':''}>${fmt(mInc-mTot)}</b></span></div>`:'')+mRows.map(r=>`<button class="row" onclick="pickRow('${r.id}')"><i class="dot" style="background:${cat(r.id).color}"></i><span>${esc(cat(r.id).name)}</span><b>${fmt(r.v)}</b></button>`).join('');
 }
 function pick(id){sel=sel===id?null:id;render()}
 function step(d){vm+=d;if(vm<0){vm=11;vy--}if(vm>11){vm=0;vy++}mode='m';dOff=0;sel=null;render()}
@@ -208,7 +217,7 @@ function pickRow(id){const was=mode==='m';mode='m';dOff=0;sel=was&&sel===id?null
 
 /* sheets */
 function showSheet(h){$('sh').innerHTML=h;$('ov').classList.add('show')}
-function closeSheet(){rmMode=false;$('ov').classList.remove('show')}
+function closeSheet(){rmMode=false;editId=null;addInc=false;$('ov').classList.remove('show')}
 
 /* confirm before anything is removed */
 let cfFn=null;
@@ -222,18 +231,21 @@ function cfYes(){const f=cfFn;cfNo();if(f)f()}
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('cf').classList.contains('show'))cfNo()});
 
 function openExp(){
-  if(!S.cats.length){openCat();return}
-  if(!S.cats.find(c=>c.id===pickedCat))pickedCat=S.cats[0].id;
-  showSheet(`<input class="in amt" id="a" type="number" inputmode="decimal" step="any" min="0" placeholder="₹0" onkeydown="if(event.key==='Enter')addExp()">
-    <div class="chips">${S.cats.map(c=>`<button class="chip ${c.id===pickedCat?'on':''}" onclick="pickCat('${c.id}')"><i class="dot" style="background:${col(c.color)}"></i>${esc(c.name)}</button>`).join('')}</div>
-    <div class="two"><input class="in" id="n" placeholder="Note" maxlength="60" onkeydown="if(event.key==='Enter')addExp()">
+  if(!addInc&&!S.cats.length){openCat();return}
+  if(S.cats.length&&!S.cats.find(c=>c.id===pickedCat))pickedCat=S.cats[0].id;
+  showSheet(`<div class="seg"><button class="${addInc?'':'on'}" onclick="setKind(false)">Expense</button><button class="${addInc?'on inc':''}" onclick="setKind(true)">Income</button></div>
+    <input class="in amt" id="a" type="number" inputmode="decimal" step="any" min="0" placeholder="₹0" onkeydown="if(event.key==='Enter')addExp()">
+    ${addInc?'':`<div class="chips">${S.cats.map(c=>`<button class="chip ${c.id===pickedCat?'on':''}" onclick="pickCat('${c.id}')"><i class="dot" style="background:${col(c.color)}"></i>${esc(c.name)}</button>`).join('')}</div>`}
+    <div class="two"><input class="in" id="n" placeholder="${addInc?'Source (e.g. Salary)':'Note'}" maxlength="60" onkeydown="if(event.key==='Enter')addExp()">
     <input class="in" id="d" type="date" aria-label="Date" value="${iso(new Date())}" max="${iso(new Date())}" onkeydown="if(event.key==='Enter')addExp()"></div>
     <button class="go" onclick="addExp()">Add</button>`);
-  setTimeout(()=>$('a').focus(),50);
+  setTimeout(()=>{const a=$('a');if(a)a.focus()},50);
 }
-function pickCat(id){
-  const a=$('a').value,n=$('n').value,d=$('d').value;pickedCat=id;openExp();$('a').value=a;$('n').value=n;$('d').value=d;
+function reopenExp(fn){
+  const a=$('a').value,n=$('n').value,d=$('d').value;fn();openExp();$('a').value=a;$('n').value=n;$('d').value=d;
 }
+function pickCat(id){reopenExp(()=>{pickedCat=id})}
+function setKind(v){reopenExp(()=>{addInc=v})}
 function addExp(){
   const amt=parseFloat($('a').value);
   if(!(amt>0)){$('a').focus();return}
@@ -241,7 +253,8 @@ function addExp(){
   const D=parseIso($('d').value),now=new Date();
   if(!D||D>dayStart(0)){$('d').focus();return}
   const ts=new Date(D.getFullYear(),D.getMonth(),D.getDate(),now.getHours(),now.getMinutes(),now.getSeconds(),now.getMilliseconds()).getTime();
-  S.exp.push({id:uid('e'),cat:pickedCat,amt:Math.round(amt*100)/100,note:$('n').value.trim(),ts});
+  S.exp.push(Object.assign({id:uid('e'),cat:addInc?'income':pickedCat,amt:Math.round(amt*100)/100,note:$('n').value.trim(),ts},addInc?{inc:true}:{}));
+  addInc=false;
   save();closeSheet();
   /* jump the pie to the day that was just added to */
   vy=D.getFullYear();vm=D.getMonth();mode='d';dOff=Math.max(0,Math.round((dayStart(0)-D)/864e5));sel=null;render();
@@ -252,9 +265,19 @@ function openCat(){
   const rm=rmMode&&palette().length>1;
   showSheet(`<input class="in" id="cn" placeholder="Category name" maxlength="20" onkeydown="if(event.key==='Enter')addCat()">
     <div class="sw ${rm?'rmm':''}">${palette().map(c=>`<button class="${c===pc&&!rm?'on':''}" style="background:${col(c)}" onclick="${rm?`rmColor('${c}')`:`pc='${c}';swap()`}" aria-label="${rm?'Remove colour':'Colour'}"></button>`).join('')}<label class="cc" title="More colours"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><input type="color" value="${pc}" onchange="newColor(this.value)"></label><button class="cc ${rmMode?'act':''}" title="Remove colours" aria-label="Remove colours" onclick="togRm()"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button></div>
-    <button class="go" onclick="addCat()">Add</button>
-    ${S.cats.map(c=>`<div class="it"><i class="dot" style="background:${col(c.color)}"></i><span class="m">${esc(c.name)}</span><button class="x" onclick="delCat('${c.id}')" aria-label="Delete">×</button></div>`).join('')}`);
+    <button class="go" onclick="addCat()">${editId?'Save':'Add'}</button>
+    ${editId?`<button class="go ghost" onclick="cancelEdit()">Cancel</button>`:''}
+    ${S.cats.map(c=>`<div class="it ${c.id===editId?'editing':''}"><i class="dot" style="background:${col(c.color)}"></i><span class="m">${esc(c.name)}</span><button class="x ed" onclick="editCategory('${c.id}')" aria-label="Edit"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg></button><button class="x" onclick="delCat('${c.id}')" aria-label="Delete">×</button></div>`).join('')}`);
 }
+function editCategory(id){
+  const c=S.cats.find(x=>x.id===id);if(!c)return;
+  const v=c.color.toLowerCase();
+  /* make sure the category's colour is in the palette so it shows as selected */
+  if(COLORS.includes(v))S.hidden=S.hidden.filter(x=>x!==v);else if(!S.colors.includes(v))S.colors.push(v);
+  save();editId=id;pc=v;rmMode=false;openCat();
+  const n=$('cn');n.value=c.name;n.focus();
+}
+function cancelEdit(){editId=null;openCat()}
 function swap(){const v=$('cn').value;openCat();$('cn').value=v}
 function togRm(){rmMode=!rmMode;swap()}
 function rmColor(c){
@@ -274,11 +297,16 @@ function newColor(v){
 }
 function addCat(){
   const n=$('cn').value.trim();if(!n){$('cn').focus();return}
-  S.cats.push({id:uid('c'),name:n,color:pc});save();render();openCat();
+  const c=editId&&S.cats.find(x=>x.id===editId);
+  if(c){c.name=n;c.color=pc;editId=null} /* editing: existing expenses follow the category automatically */
+  else S.cats.push({id:uid('c'),name:n,color:pc});
+  save();render();openCat();
+  if($('hist').classList.contains('show'))hist();
 }
 function delCat(id){
   const c=S.cats.find(x=>x.id===id),n=S.exp.filter(e=>e.cat===id).length;
   ask(n?`Delete "${c?c.name:'this category'}" and its ${n} expense${n>1?'s':''}?`:`Delete "${c?c.name:'this category'}"?`,()=>{
+    if(editId===id)editId=null;
     S.cats=S.cats.filter(c=>c.id!==id);S.exp=S.exp.filter(e=>e.cat!==id);
     save();render();openCat();
   });
@@ -326,7 +354,7 @@ function importData(f){
       });
       d.exp.forEach(e=>{
         if(e&&typeof e.id==='string'&&typeof e.cat==='string'&&Number.isFinite(e.amt)&&e.amt>0&&Number.isFinite(e.ts)&&!eids.has(e.id)){
-          S.exp.push({id:e.id,cat:e.cat,amt:e.amt,note:typeof e.note==='string'?e.note.slice(0,60):'',ts:e.ts});eids.add(e.id);ne++;
+          S.exp.push(Object.assign({id:e.id,cat:e.cat,amt:e.amt,note:typeof e.note==='string'?e.note.slice(0,60):'',ts:e.ts},e.inc===true?{inc:true}:{}));eids.add(e.id);ne++;
         }
       });
       save();render();
@@ -372,11 +400,13 @@ function xRange(){
     a=f;b=new Date(t.getFullYear(),t.getMonth(),t.getDate()+1);
     label=dfmt(f)+' – '+dfmt(t);file=iso(f)+'_to_'+iso(t);
   }
-  const list=S.exp.filter(e=>e.ts>=a.getTime()&&e.ts<b.getTime()).sort((p,q)=>p.ts-q.ts);
-  return{a,b,label,file,list,total:list.reduce((s,e)=>s+e.amt,0)};
+  /* all = every entry in range; list = expenses only; incs = income only */
+  const all=S.exp.filter(e=>e.ts>=a.getTime()&&e.ts<b.getTime()).sort((p,q)=>p.ts-q.ts);
+  const list=all.filter(e=>!e.inc),incs=all.filter(e=>e.inc);
+  return{a,b,label,file,all,list,incs,total:sumAmt(list),incTotal:sumAmt(incs)};
 }
 function openExtract(){
-  const r=xRange(),n=r?r.list.length:0,today=iso(new Date());
+  const r=xRange(),n=r?r.all.length:0,today=iso(new Date());
   const tabs=[['m','Month'],['d','Day'],['p','Period']].map(([k,l])=>`<button class="${X.t===k?'on':''}" onclick="X.t='${k}';openExtract()">${l}</button>`).join('');
   let body;
   if(X.t==='m'){
@@ -389,7 +419,7 @@ function openExtract(){
     <div class="lb">From</div><input class="in" type="date" value="${X.from}" max="${today}" onchange="X.from=this.value;openExtract()">
     <div class="lb">To</div><input class="in" type="date" value="${X.to}" max="${today}" onchange="X.to=this.value;openExtract()">`;
   }
-  const info=!r?'Pick a valid date':n?`${n} expense${n===1?'':'s'} · ${fmt(r.total)}`:'No expenses in this range';
+  const info=!r?'Pick a valid date':n?`${r.list.length} expense${r.list.length===1?'':'s'} · ${fmt(r.total)}`+(r.incs.length?` · +${fmt(r.incTotal)} income`:''):'Nothing recorded in this range';
   showSheet(`<div class="seg">${tabs}</div>${body}<div class="st">${info}</div>
     <button class="go" onclick="makeReport()" ${n?'':'disabled'}>Create report</button>
     <div class="seg"><button onclick="openSettings()">Back</button></div>`);
@@ -434,7 +464,7 @@ async function buildPdf(cvs){
   return new Blob(parts,{type:'application/pdf'});
 }
 async function makeReport(){
-  const r=xRange();if(!r||!r.list.length)return;
+  const r=xRange();if(!r||!r.all.length)return;
   closeSheet();
   $('rep').classList.add('show');$('repf').innerHTML='';
   $('repb').innerHTML='<div class="st">Creating report…</div>';
@@ -478,17 +508,23 @@ function drawReport(r,a4){
   /* numbers */
   const rows=sums(r.list).map(x=>({...x,...cc(x.id)}));
   const byDay={};
-  r.list.forEach(e=>{const k=new Date(e.ts).toDateString();const o=byDay[k]||(byDay[k]={ts:e.ts,items:[],tot:0});o.items.push(e);o.tot+=e.amt});
+  /* byDay covers every entry (expenses + income); tot = spent that day, inc = income that day */
+  r.all.forEach(e=>{const k=new Date(e.ts).toDateString();const o=byDay[k]||(byDay[k]={ts:e.ts,items:[],tot:0,inc:0});o.items.push(e);if(e.inc)o.inc+=e.amt;else o.tot+=e.amt});
   const days=Object.values(byDay);
-  const hi=days.reduce((a,b)=>b.tot>a.tot?b:a);
+  const hasExp=r.list.length>0,hasInc=r.incs.length>0;
   const end=Math.min(r.b.getTime(),dayStart(-1).getTime());
   const nd=Math.max(1,Math.round((end-r.a.getTime())/864e5));
-  const tiles=[
-    ['Total spent',fmt(r.total),''],
-    ['Expenses',String(r.list.length),''],
-    ['Daily average',fmt(r.total/nd),'over '+nd+' day'+(nd>1?'s':'')],
-    ['Highest day',fmt(hi.tot),dfmt(new Date(hi.ts))]
-  ];
+  const tiles=[];
+  if(hasExp){
+    const hi=days.reduce((a,b)=>b.tot>a.tot?b:a);
+    tiles.push(['Total spent',fmt(r.total),''],
+      ['Expenses',String(r.list.length),''],
+      ['Daily average',fmt(r.total/nd),'over '+nd+' day'+(nd>1?'s':'')],
+      ['Highest day',fmt(hi.tot),dfmt(new Date(hi.ts))]);
+  }
+  if(hasInc)tiles.push(['Income','+'+fmt(r.incTotal),r.incs.length+' entr'+(r.incs.length>1?'ies':'y')],
+    ['Balance',fmt(r.incTotal-r.total),'income − spent']);
+  const net=r.incTotal-r.total;
 
   /* blocks (each knows its height and how to draw itself) */
   const items=[];
@@ -510,7 +546,7 @@ function drawReport(r,a4){
     g.fillStyle=INK;g.fillRect(P,y+180,CW,4);
   }});
 
-  items.push({h:370,draw:(g,y)=>{
+  items.push({h:22+tiles.length/2*174,draw:(g,y)=>{
     const tw=(CW-24)/2;
     tiles.forEach((t,i)=>{
       const x=P+(i%2)*(tw+24),ty=y+24+Math.floor(i/2)*174;
@@ -522,8 +558,8 @@ function drawReport(r,a4){
   }});
 
   const legH=rows.length*60;
-  items.push(sec('By category',rows.length+' categor'+(rows.length>1?'ies':'y')));
-  items.push({h:Math.max(380,legH)+40,draw:(g,y)=>{
+  if(hasExp)items.push(sec('By category',rows.length+' categor'+(rows.length>1?'ies':'y')));
+  if(hasExp)items.push({h:Math.max(380,legH)+40,draw:(g,y)=>{
     const cx=P+190,cy=y+190,R=150;let a0=-Math.PI/2;
     g.lineWidth=64;g.lineCap='butt';
     g.strokeStyle=SOFT;g.beginPath();g.arc(cx,cy,R,0,Math.PI*2);g.stroke();
@@ -548,29 +584,41 @@ function drawReport(r,a4){
     });
   }});
 
-  items.push(sec('All expenses',r.list.length+' total'));
+  items.push(sec(hasInc?'All transactions':'All expenses',r.all.length+' total'));
+  const GREEN=DARK?'#51cf66':'#2f9e44';
   days.forEach(d=>{
     const dd=new Date(d.ts);
+    const dsum=d.inc>0?(d.tot>0?'+'+fmt(d.inc)+'   −'+fmt(d.tot):'+'+fmt(d.inc)):fmt(d.tot);
     items.push({h:76,head:true,draw:(g,y)=>{
       g.fillStyle=SOFT;rr(g,P,y+8,CW,60,16);g.fill();
       g.fillStyle=INK;g.font=f(800,28);
       g.fillText(dd.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'}),P+22,y+47);
-      g.textAlign='right';g.fillText(fmt(d.tot),W-P-22,y+47);
+      g.textAlign='right';g.fillText(dsum,W-P-22,y+47);
     }});
     d.items.forEach(e=>{
-      const c=cc(e.cat),t=new Date(e.ts).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+      const isI=!!e.inc,c=isI?{name:'Income',color:GREEN}:cc(e.cat),t=new Date(e.ts).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
       items.push({h:88,draw:(g,y)=>{
         g.fillStyle=c.color;g.beginPath();g.arc(P+22,y+44,11,0,Math.PI*2);g.fill();
-        const amt=fmt(e.amt);
-        g.fillStyle=INK;g.font=f(800,28);g.textAlign='right';g.fillText(amt,W-P-8,y+40);
+        const amt=(isI?'+':'')+fmt(e.amt);
+        g.fillStyle=isI?GREEN:INK;g.font=f(800,28);g.textAlign='right';g.fillText(amt,W-P-8,y+40);
         const aw=g.measureText(amt).width;
-        g.textAlign='left';g.font=f(600,28);g.fillText(fit(g,e.note||c.name,CW-60-aw-24),P+52,y+40);
+        g.fillStyle=INK;g.textAlign='left';g.font=f(600,28);g.fillText(fit(g,e.note||c.name,CW-60-aw-24),P+52,y+40);
         g.fillStyle=MUT;g.font=f(400,23);g.fillText(fit(g,(e.note?c.name+' · ':'')+t,CW-60),P+52,y+72);
         g.fillStyle=LINE;g.fillRect(P,y+86,CW,2);
       }});
     });
   });
-  items.push({h:150,draw:(g,y)=>{
+  if(hasInc){
+    items.push({h:290,draw:(g,y)=>{
+      g.fillStyle=INK;g.fillRect(P,y+20,CW,4);
+      const L=[['Income','+'+fmt(r.incTotal),GREEN,36],['Spent',fmt(r.total),INK,36],['Balance',fmt(net),net<0?'#e03131':INK,44]];
+      L.forEach((x,i)=>{
+        const ly=y+84+i*72;
+        g.fillStyle=INK;g.textAlign='left';g.font=f(800,x[3]);g.fillText(x[0],P,ly);
+        g.textAlign='right';shrink(g,x[1],800,x[3]+4,CW-260);g.fillStyle=x[2];g.fillText(x[1],W-P,ly);
+      });
+    }});
+  }else items.push({h:150,draw:(g,y)=>{
     g.fillStyle=INK;g.fillRect(P,y+20,CW,4);
     g.font=f(800,40);g.fillText('Total',P,y+92);
     g.textAlign='right';shrink(g,fmt(r.total),800,44,CW-200);g.fillText(fmt(r.total),W-P,y+92);
@@ -611,13 +659,14 @@ function hist(){
   let h=`<div class="hh"><span>History</span><button class="x" onclick="closeHist()" aria-label="Close">×</button></div>
   <div class="tabs"><button class="${hTab==='d'?'on':''}" onclick="hTab='d';hist()">Days</button><button class="${hTab==='m'?'on':''}" onclick="hTab='m';hist()">Months</button></div><div class="hl">`;
   const list=[...S.exp].sort((a,b)=>b.ts-a.ts);
-  if(!list.length)h+='<div class="st" style="padding:36px 0">No expenses yet</div>';
+  if(!list.length)h+='<div class="st" style="padding:36px 0">Nothing recorded yet</div>';
   else if(hTab==='d'){
     /* per day: expenses without a note are clubbed by category, expenses with a note stay on their own row */
     const days=[];
     list.forEach(e=>{
       const k=iso(new Date(e.ts));let d=days[days.length-1];
-      if(!d||d.k!==k){d={k,ts:e.ts,tot:0,rows:[],g:{}};days.push(d)}
+      if(!d||d.k!==k){d={k,ts:e.ts,tot:0,inc:0,rows:[],g:{}};days.push(d)}
+      if(e.inc){d.inc+=e.amt;d.rows.push({t:'i',e});return}
       d.tot+=e.amt;
       if(e.note)d.rows.push({t:'n',e});
       else{let g=d.g[e.cat];if(!g){g=d.g[e.cat]={t:'g',cat:e.cat,items:[],tot:0};d.rows.push(g)}g.items.push(e);g.tot+=e.amt}
@@ -625,9 +674,12 @@ function hist(){
     const del=e=>`<button class="x" onclick="delExp('${e.id}')" aria-label="Delete">×</button>`;
     days.forEach(d=>{
       const dt=new Date(d.ts);
-      h+=`<div class="dh"><span>${dt.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'})}</span><span>${fmt(d.tot)}</span></div>`;
+      h+=`<div class="dh"><span>${dt.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'})}</span><span>${d.inc>0?`<span class="pos">+${fmt(d.inc)}</span>`+(d.tot>0?' · ':''):''}${d.inc>0&&!d.tot?'':fmt(d.tot)}</span></div>`;
       d.rows.forEach(r=>{
-        if(r.t==='g'&&r.items.length>1){
+        if(r.t==='i'){
+          const e=r.e;
+          h+=`<div class="it"><i class="dot" style="background:var(--green)"></i><div class="m"><div>${esc(e.note||'Income')}</div><small>${esc(e.note?'Income · ':'')}${hTime(e.ts)}</small></div><span class="neg pos">+${fmt(e.amt)}</span>${del(e)}</div>`;
+        }else if(r.t==='g'&&r.items.length>1){
           const c=cat(r.cat),k=d.k+'|'+r.cat,open=hOpen.has(k);
           h+=`<button class="it g ${open?'open':''}" onclick="togG('${k}')" aria-expanded="${open}"><i class="dot" style="background:${c.color}"></i><span class="m"><span>${esc(c.name)}</span><small>${r.items.length} expenses</small></span><span class="neg">${fmt(r.tot)}</span><span class="cv"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span></button>`;
           if(open)r.items.forEach(e=>{h+=`<div class="it sub"><div class="m">${hTime(e.ts)}</div><span class="neg">${fmt(e.amt)}</span>${del(e)}</div>`});
@@ -638,18 +690,19 @@ function hist(){
       });
     });
   }else{
-    const m={},n={};list.forEach(e=>{const d=new Date(e.ts),k=d.getFullYear()*12+d.getMonth();m[k]=(m[k]||0)+e.amt;n[k]=(n[k]||0)+1});
-    const keys=Object.keys(m).sort((a,b)=>b-a),mx=Math.max(...keys.map(k=>m[k]));
+    const m={},n={},inc={};
+    list.forEach(e=>{const d=new Date(e.ts),k=d.getFullYear()*12+d.getMonth();m[k]=m[k]||0;n[k]=n[k]||0;inc[k]=inc[k]||0;if(e.inc)inc[k]+=e.amt;else{m[k]+=e.amt;n[k]++}});
+    const keys=Object.keys(m).sort((a,b)=>b-a),mx=Math.max(1,...keys.map(k=>m[k]));
     keys.forEach(k=>{
       const y=Math.floor(k/12),mo=k%12;
-      h+=`<button class="it mo" onclick="vy=${y};vm=${mo};mode='m';dOff=0;sel=null;closeHist();render()"><span class="m"><b>${monthName(y,mo)}</b><small>${n[k]} expense${n[k]>1?'s':''}</small></span><span class="neg">${fmt(m[k])}</span><span class="tr"><i style="width:${Math.max(2,m[k]/mx*100)}%"></i></span></button>`;
+      h+=`<button class="it mo" onclick="vy=${y};vm=${mo};mode='m';dOff=0;sel=null;closeHist();render()"><span class="m"><b>${monthName(y,mo)}</b><small>${n[k]} expense${n[k]===1?'':'s'}${inc[k]>0?` · <span class="pos">+${fmt(inc[k])} income</span>`:''}</small></span><span class="neg">${fmt(m[k])}</span><span class="tr"><i style="width:${Math.max(2,m[k]/mx*100)}%"></i></span></button>`;
     });
   }
   $('hist').innerHTML=h+'</div>';
 }
 function delExp(id){
   const e=S.exp.find(x=>x.id===id);
-  ask(e?`Delete this ${fmt(e.amt)} expense?`:'Delete this expense?',()=>{S.exp=S.exp.filter(x=>x.id!==id);save();render();hist()});
+  ask(e?`Delete this ${fmt(e.amt)} ${e.inc?'income':'expense'}?`:'Delete this entry?',()=>{S.exp=S.exp.filter(x=>x.id!==id);save();render();hist()});
 }
 
 /* follow device theme live; the Settings toggle still works until the device theme changes */
