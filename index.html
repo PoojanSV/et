@@ -61,6 +61,7 @@ main{flex:1;overflow:auto;padding:18px 20px;display:flex;flex-direction:column;a
 .rb:active{transform:scale(.94)}
 .ov{position:absolute;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;z-index:5}
 .ov.show{display:flex}
+.ov.top{z-index:8}
 .sh{width:100%;max-height:85%;overflow:auto;background:var(--w);border-top:2px solid var(--k);border-radius:24px 24px 0 0;padding:20px 20px calc(20px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:14px}
 .in{width:100%;border:2px solid var(--k);border-radius:14px;padding:12px 14px;background:var(--w);outline:0}
 .in[type=date]{min-height:50px}
@@ -159,13 +160,19 @@ if(!S||!Array.isArray(S.cats)||!Array.isArray(S.exp))S={cats:[
   {id:'c3',name:'Bills',color:COLORS[2]},{id:'c4',name:'Other',color:COLORS[5]}],exp:[]};
 if(!Array.isArray(S.colors))S.colors=[];
 if(!Array.isArray(S.hidden))S.hidden=[];
-let rmMode=false,editId=null,addInc=false; /* editId = category being edited; addInc = add sheet is in Income mode */
+let rmMode=false,editId=null,addInc=false,editExp=null; /* editId = category being edited; addInc = add sheet is in Income mode */
 const palette=()=>COLORS.filter(c=>!S.hidden.includes(c)).concat(S.colors);
 const save=()=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt=n=>(n<0?'-':'')+'₹'+Math.abs(n).toLocaleString('en-IN',{maximumFractionDigits:2});
 const sumAmt=l=>l.reduce((a,e)=>a+e.amt,0);
+/* balance carryover: running balance (income - expenses) from the month of the first income entry, up to time t.
+   Nothing before the first income month counts, so older expense-only history doesn't show up as a negative balance. */
+const incStart=()=>{let m=Infinity;S.exp.forEach(e=>{if(e.inc&&e.ts<m)m=e.ts});if(m===Infinity)return null;const d=new Date(m);return new Date(d.getFullYear(),d.getMonth(),1).getTime()};
+const carryBefore=t=>{const s=incStart();if(s===null||t<=s)return 0;return Math.round(S.exp.reduce((a,e)=>e.ts>=s&&e.ts<t?a+(e.inc?e.amt:-e.amt):a,0)*100)/100};
+const sgn=n=>(n>0?'+':'')+fmt(n);
+const PEN='<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>';
 const lum=c=>{const n=parseInt(c.slice(1),16);return(.299*(n>>16)+.587*(n>>8&255)+.114*(n&255))/255};
 const col=c=>{const d=document.documentElement.dataset.theme==='dark',l=lum(c);return d&&l<.18?'#ffffff':!d&&l>.88?'#000000':c};
 const cat=id=>{const c=S.cats.find(c=>c.id===id)||{name:'Deleted',color:'#868e96'};return{...c,color:col(c.color)}};
@@ -186,6 +193,7 @@ function render(){
   const mx=maxBack();if(dOff>mx)dOff=mx;
   /* income entries (inc:true) are kept out of the pie and category totals; they only add to the income / balance lines */
   const D=dayStart(dOff),dAll=S.exp.filter(e=>sameDay(e.ts,D)),dl=dAll.filter(e=>!e.inc),dTot=sumAmt(dl),dInc=sumAmt(dAll.filter(e=>e.inc));
+  const carry=carryBefore(new Date(vy,vm,1).getTime());
   const mAll=S.exp.filter(inMonth),me=mAll.filter(e=>!e.inc),mTot=sumAmt(me),mInc=sumAmt(mAll.filter(e=>e.inc)),mRows=sums(me);
   const tot=mode==='d'?dTot:mTot,rows=mode==='d'?sums(dl):mRows;
   if(sel&&!rows.find(r=>r.id===sel))sel=null;
@@ -207,7 +215,7 @@ function render(){
 
   const atNow=vy===new Date().getFullYear()&&vm===new Date().getMonth();
   $('month').innerHTML=`<div class="nav"><button onclick="step(-1)" aria-label="Previous month">‹</button><span>${monthName(vy,vm)}</span><button onclick="step(1)" aria-label="Next month" ${atNow?'disabled':''}>›</button></div>
-    <div class="tot">${fmt(mTot)}</div>`+(mInc>0?`<div class="bal"><span>Income <b class="pos">+${fmt(mInc)}</b></span><span>Balance <b ${mInc-mTot<0?'style="color:var(--red)"':''}>${fmt(mInc-mTot)}</b></span></div>`:'')+mRows.map(r=>`<button class="row" onclick="pickRow('${r.id}')"><i class="dot" style="background:${cat(r.id).color}"></i><span>${esc(cat(r.id).name)}</span><b>${fmt(r.v)}</b></button>`).join('');
+    <div class="tot">${fmt(mTot)}</div>`+((mInc>0||carry!==0)?`<div class="bal">${carry!==0?`<span>Carried <b ${carry<0?'style="color:var(--red)"':'class="pos"'}>${sgn(carry)}</b></span>`:''}${mInc>0?`<span>Income <b class="pos">+${fmt(mInc)}</b></span>`:''}<span>Balance <b ${carry+mInc-mTot<0?'style="color:var(--red)"':''}>${fmt(carry+mInc-mTot)}</b></span></div>`:'')+mRows.map(r=>`<button class="row" onclick="pickRow('${r.id}')"><i class="dot" style="background:${cat(r.id).color}"></i><span>${esc(cat(r.id).name)}</span><b>${fmt(r.v)}</b></button>`).join('');
 }
 function pick(id){sel=sel===id?null:id;render()}
 function step(d){vm+=d;if(vm<0){vm=11;vy--}if(vm>11){vm=0;vy++}mode='m';dOff=0;sel=null;render()}
@@ -217,7 +225,7 @@ function pickRow(id){const was=mode==='m';mode='m';dOff=0;sel=was&&sel===id?null
 
 /* sheets */
 function showSheet(h){$('sh').innerHTML=h;$('ov').classList.add('show')}
-function closeSheet(){rmMode=false;editId=null;addInc=false;$('ov').classList.remove('show')}
+function closeSheet(){rmMode=false;editId=null;addInc=false;editExp=null;$('ov').classList.remove('show','top')}
 
 /* confirm before anything is removed */
 let cfFn=null;
@@ -238,7 +246,8 @@ function openExp(){
     ${addInc?'':`<div class="chips">${S.cats.map(c=>`<button class="chip ${c.id===pickedCat?'on':''}" onclick="pickCat('${c.id}')"><i class="dot" style="background:${col(c.color)}"></i>${esc(c.name)}</button>`).join('')}</div>`}
     <div class="two"><input class="in" id="n" placeholder="${addInc?'Source (e.g. Salary)':'Note'}" maxlength="60" onkeydown="if(event.key==='Enter')addExp()">
     <input class="in" id="d" type="date" aria-label="Date" value="${iso(new Date())}" max="${iso(new Date())}" onkeydown="if(event.key==='Enter')addExp()"></div>
-    <button class="go" onclick="addExp()">Add</button>`);
+    <button class="go" onclick="addExp()">${editExp?'Save':'Add'}</button>${editExp?'<button class="go ghost" onclick="closeSheet()">Cancel</button>':''}`);
+  $('ov').classList.toggle('top',!!editExp); /* editing starts from History, which sits above the normal sheet layer */
   setTimeout(()=>{const a=$('a');if(a)a.focus()},50);
 }
 function reopenExp(fn){
@@ -246,16 +255,27 @@ function reopenExp(fn){
 }
 function pickCat(id){reopenExp(()=>{pickedCat=id})}
 function setKind(v){reopenExp(()=>{addInc=v})}
+/* edit an existing entry: same sheet as Add, pre-filled */
+function editExpense(id){
+  const e=S.exp.find(x=>x.id===id);if(!e)return;
+  editExp=id;addInc=!!e.inc;if(!e.inc&&S.cats.find(c=>c.id===e.cat))pickedCat=e.cat;
+  openExp();
+  $('a').value=e.amt;$('n').value=e.note||'';$('d').value=iso(new Date(e.ts));
+}
 function addExp(){
   const amt=parseFloat($('a').value);
   if(!(amt>0)){$('a').focus();return}
   /* chosen day (today or any past day), keeping the current time of day so entries stay in order */
   const D=parseIso($('d').value),now=new Date();
   if(!D||D>dayStart(0)){$('d').focus();return}
-  const ts=new Date(D.getFullYear(),D.getMonth(),D.getDate(),now.getHours(),now.getMinutes(),now.getSeconds(),now.getMilliseconds()).getTime();
-  S.exp.push(Object.assign({id:uid('e'),cat:addInc?'income':pickedCat,amt:Math.round(amt*100)/100,note:$('n').value.trim(),ts},addInc?{inc:true}:{}));
-  addInc=false;
+  /* when editing, keep the entry's original time of day on the (possibly new) date */
+  const ed=editExp&&S.exp.find(x=>x.id===editExp),t0=ed?new Date(ed.ts):now;
+  const ts=new Date(D.getFullYear(),D.getMonth(),D.getDate(),t0.getHours(),t0.getMinutes(),t0.getSeconds(),t0.getMilliseconds()).getTime();
+  const rec={cat:addInc?'income':pickedCat,amt:Math.round(amt*100)/100,note:$('n').value.trim(),ts};
+  if(ed){Object.assign(ed,rec);if(addInc)ed.inc=true;else delete ed.inc}
+  else S.exp.push(Object.assign({id:uid('e')},rec,addInc?{inc:true}:{}));
   save();closeSheet();
+  if($('hist').classList.contains('show'))hist();
   /* jump the pie to the day that was just added to */
   vy=D.getFullYear();vm=D.getMonth();mode='d';dOff=Math.max(0,Math.round((dayStart(0)-D)/864e5));sel=null;render();
 }
@@ -403,7 +423,7 @@ function xRange(){
   /* all = every entry in range; list = expenses only; incs = income only */
   const all=S.exp.filter(e=>e.ts>=a.getTime()&&e.ts<b.getTime()).sort((p,q)=>p.ts-q.ts);
   const list=all.filter(e=>!e.inc),incs=all.filter(e=>e.inc);
-  return{a,b,label,file,all,list,incs,total:sumAmt(list),incTotal:sumAmt(incs)};
+  return{a,b,label,file,all,list,incs,total:sumAmt(list),incTotal:sumAmt(incs),carry:carryBefore(a.getTime())};
 }
 function openExtract(){
   const r=xRange(),n=r?r.all.length:0,today=iso(new Date());
@@ -522,9 +542,9 @@ function drawReport(r,a4){
       ['Daily average',fmt(r.total/nd),'over '+nd+' day'+(nd>1?'s':'')],
       ['Highest day',fmt(hi.tot),dfmt(new Date(hi.ts))]);
   }
-  if(hasInc)tiles.push(['Income','+'+fmt(r.incTotal),r.incs.length+' entr'+(r.incs.length>1?'ies':'y')],
-    ['Balance',fmt(r.incTotal-r.total),'income − spent']);
-  const net=r.incTotal-r.total;
+  const carry=r.carry,hasBal=hasInc||carry!==0,net=carry+r.incTotal-r.total;
+  if(hasBal)tiles.push(hasInc?['Income','+'+fmt(r.incTotal),r.incs.length+' entr'+(r.incs.length>1?'ies':'y')]:['Carried over',sgn(carry),'from earlier months'],
+    ['Balance',fmt(net),carry!==0?'incl. '+sgn(carry)+' carried':'income − spent']);
 
   /* blocks (each knows its height and how to draw itself) */
   const items=[];
@@ -608,10 +628,13 @@ function drawReport(r,a4){
       }});
     });
   });
-  if(hasInc){
-    items.push({h:290,draw:(g,y)=>{
+  if(hasBal){
+    const L=[];
+    if(carry!==0)L.push(['Carried over',sgn(carry),carry<0?'#e03131':GREEN,36]);
+    if(hasInc)L.push(['Income','+'+fmt(r.incTotal),GREEN,36]);
+    L.push(['Spent',fmt(r.total),INK,36],['Balance',fmt(net),net<0?'#e03131':INK,44]);
+    items.push({h:74+L.length*72,draw:(g,y)=>{
       g.fillStyle=INK;g.fillRect(P,y+20,CW,4);
-      const L=[['Income','+'+fmt(r.incTotal),GREEN,36],['Spent',fmt(r.total),INK,36],['Balance',fmt(net),net<0?'#e03131':INK,44]];
       L.forEach((x,i)=>{
         const ly=y+84+i*72;
         g.fillStyle=INK;g.textAlign='left';g.font=f(800,x[3]);g.fillText(x[0],P,ly);
@@ -671,7 +694,7 @@ function hist(){
       if(e.note)d.rows.push({t:'n',e});
       else{let g=d.g[e.cat];if(!g){g=d.g[e.cat]={t:'g',cat:e.cat,items:[],tot:0};d.rows.push(g)}g.items.push(e);g.tot+=e.amt}
     });
-    const del=e=>`<button class="x" onclick="delExp('${e.id}')" aria-label="Delete">×</button>`;
+    const del=e=>`<button class="x ed" onclick="editExpense('${e.id}')" aria-label="Edit">${PEN}</button><button class="x" onclick="delExp('${e.id}')" aria-label="Delete">×</button>`;
     days.forEach(d=>{
       const dt=new Date(d.ts);
       h+=`<div class="dh"><span>${dt.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'})}</span><span>${d.inc>0?`<span class="pos">+${fmt(d.inc)}</span>`+(d.tot>0?' · ':''):''}${d.inc>0&&!d.tot?'':fmt(d.tot)}</span></div>`;
