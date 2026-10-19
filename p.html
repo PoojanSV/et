@@ -156,7 +156,7 @@ TOTAL ......... 75.00</textarea>
     <div id="pdfTextOpts">
       <div class="row">
         <div class="field"><label for="pdfPx">Text size <span id="pdfPxV"></span></label>
-          <input type="range" id="pdfPx" min="20" max="72" value="34"></div>
+          <input type="range" id="pdfPx" min="16" max="100" value="34"></div>
         <div class="field"><label for="pdfDark">Darkness <span id="pdfDarkV"></span></label>
           <input type="range" id="pdfDark" min="40" max="230" value="170"></div>
       </div>
@@ -348,4 +348,4 @@ async function connectBluetooth() {
       async write(bytes) {
         const p = c.properties, wantAck = $('#wmode').value === 'ack';
         const useAck = p.write && (wantAck || !p.writeWithoutResponse);
-        if (useAck) return c.writeValueWithResponse ? 
+        if (useAck) return c.writeValueWithResponse ?
