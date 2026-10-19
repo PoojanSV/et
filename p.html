@@ -1,0 +1,921 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thermal Print</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#14181f;--mut:#667085;--line:#e3e6eb;--acc:#0f766e;--accInk:#fff;--err:#b42318;--ok:#067647;--soft:#eef2f1}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#171a21;--ink:#eef0f4;--mut:#98a2b3;--line:#272c36;--acc:#2dd4bf;--accInk:#04201d;--err:#f97066;--ok:#47cd89;--soft:#1e232c}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans","Noto Sans Devanagari",sans-serif}
+.wrap{max-width:640px;margin:0 auto;padding:16px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 14px}
+h1{font-size:20px;margin:0;letter-spacing:-.01em}
+.pill{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--mut);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:5px 12px;max-width:60%}
+.pill span.t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dot{width:9px;height:9px;border-radius:50%;background:#98a2b3;flex:none}
+.pill.on .dot{background:var(--ok)}
+.pill.on{color:var(--ink)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+.row{display:flex;flex-wrap:wrap;gap:10px}
+.row>*{flex:1 1 140px}
+label{display:block;font-size:13px;color:var(--mut);margin:0 0 4px}
+.field{margin-bottom:12px}
+input[type=text],input[type=number],select,textarea{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+textarea{min-height:140px;resize:vertical}
+input[type=range]{width:100%;accent-color:var(--acc)}
+input[type=file]{width:100%;font:inherit;color:var(--mut)}
+.chk{display:flex;align-items:center;gap:8px;font-size:15px;color:var(--ink);margin:0}
+.chk input{width:18px;height:18px;accent-color:var(--acc)}
+button{font:inherit;font-weight:600;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:11px 16px;cursor:pointer}
+button.pri{background:var(--acc);border-color:var(--acc);color:var(--accInk)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.wide{width:100%;margin-top:4px}
+.tabs{display:flex;gap:6px;background:var(--soft);padding:4px;border-radius:12px;margin-bottom:14px}
+.tabs button{flex:1;border:0;background:transparent;padding:9px 6px;color:var(--mut)}
+.tabs button[aria-selected=true]{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.panel[hidden]{display:none}
+.preview{background:#fff;border:1px dashed var(--line);border-radius:10px;padding:8px;margin:6px 0 12px;text-align:center;overflow:auto;max-height:420px}
+.preview canvas{max-width:100%;image-rendering:pixelated;background:#fff}
+.hint{font-size:13px;color:var(--mut);margin:8px 0 0}
+.warn{background:#fff4e5;color:#7a4b00;border:1px solid #ffd8a6;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:14px}
+@media (prefers-color-scheme:dark){.warn{background:#2a2111;color:#f2c97d;border-color:#4a3a18}}
+.bar{height:4px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:12px;opacity:0;transition:opacity .2s}
+.bar.on{opacity:1}
+.bar i{display:block;height:100%;width:0;background:var(--acc);transition:width .1s}
+details summary{cursor:pointer;font-weight:600}
+details[open] summary{margin-bottom:12px}
+pre#log{margin:0;max-height:200px;overflow:auto;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;color:var(--mut);white-space:pre-wrap}
+pre#log .err{color:var(--err)}
+#toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,20px);background:#111;color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;max-width:90vw;z-index:9}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Thermal Print</h1>
+    <div class="pill" id="status"><i class="dot"></i><span class="t">Not connected</span></div>
+  </header>
+
+  <div class="warn" id="unsupported" hidden>
+    Web Bluetooth isn't available in this browser. Use <b>Chrome or Edge</b> on Android, Windows, macOS or Linux (not iOS, Safari or Firefox), and open this page over https or as a local file.
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <button class="pri" id="btnBt">Connect via Bluetooth</button>
+      <button id="btnDisc" hidden>Disconnect</button>
+    </div>
+    <p class="hint">Turn the printer on, keep it close, and pick <b>YHK-B280</b> (or whatever name it shows) in the list.</p>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-tab="text">Text</button>
+    <button role="tab" aria-selected="false" data-tab="image">Image</button>
+    <button role="tab" aria-selected="false" data-tab="qr">QR code</button>
+    <button role="tab" aria-selected="false" data-tab="pdf">PDF</button>
+  </div>
+
+  <!-- TEXT -->
+  <section class="card panel" id="p-text">
+    <div class="field">
+      <label for="txt">Text to print</label>
+      <textarea id="txt" placeholder="Type or paste here…">Hello from my browser!
+नमस्ते 🙏
+
+Item A ........ 50.00
+Item B ........ 25.00
+------------------------
+TOTAL ......... 75.00</textarea>
+    </div>
+    <div class="row">
+      <div class="field"><label for="align">Align</label>
+        <select id="align"><option value="0">Left</option><option value="1">Center</option><option value="2">Right</option><option value="3">Justify (fill width)</option></select></div>
+      <div class="field"><label for="size">Size</label>
+        <select id="size"><option value="0">Fit to width</option><option value="1" selected>Normal</option><option value="2">Double</option><option value="3">Triple</option></select></div>
+      <div class="field"><label for="txtMode">Print mode</label>
+        <select id="txtMode"><option value="image" selected>As image (works on every printer)</option><option value="auto">Auto</option><option value="native">Printer text (fast)</option></select></div>
+    </div>
+    <div class="row" style="margin-bottom:12px">
+      <label class="chk"><input type="checkbox" id="bold"> Bold</label>
+      <label class="chk"><input type="checkbox" id="underline"> Underline</label>
+    </div>
+    <div class="preview" id="txtPrevWrap" hidden><canvas id="txtPrev"></canvas></div>
+    <button class="pri wide" id="printText" disabled>Print text</button>
+    <p class="hint">Auto switches to image mode when your text has non-English characters (Hindi, emoji, etc.), since most mini printers can't render those natively.</p>
+  </section>
+
+  <!-- IMAGE -->
+  <section class="card panel" id="p-image" hidden>
+    <div class="field">
+      <label for="file">Choose a picture</label>
+      <input type="file" id="file" accept="image/*">
+    </div>
+    <div class="row">
+      <div class="field"><label for="dither">Style</label>
+        <select id="dither"><option value="fs">Photo (dithered)</option><option value="th">Logo / text (sharp)</option></select></div>
+      <div class="field"><label for="dark">Darkness <span id="darkV"></span></label>
+        <input type="range" id="dark" min="40" max="220" value="128"></div>
+    </div>
+    <label class="chk" style="margin-bottom:8px"><input type="checkbox" id="invert"> Invert (white on black)</label>
+    <div class="preview" id="imgPrevWrap" hidden><canvas id="imgPrev"></canvas></div>
+    <button class="pri wide" id="printImage" disabled>Print image</button>
+  </section>
+
+  <!-- QR -->
+  <section class="card panel" id="p-qr" hidden>
+    <div class="field">
+      <label for="qrText">Text or link</label>
+      <input type="text" id="qrText" value="https://example.com" autocomplete="off">
+    </div>
+    <div class="row">
+      <div class="field"><label for="qrSize">Size <span id="qrSizeV"></span></label>
+        <input type="range" id="qrSize" min="3" max="10" value="7"></div>
+      <div class="field"><label for="qrCap">Caption (optional)</label>
+        <input type="text" id="qrCap" placeholder="Scan me" autocomplete="off"></div>
+    </div>
+    <div class="preview" id="qrPrevWrap"><canvas id="qrPrev"></canvas></div>
+    <button class="pri wide" id="printQr" disabled>Print QR code</button>
+  </section>
+
+  <!-- PDF -->
+  <section class="card panel" id="p-pdf" hidden>
+    <div class="field">
+      <label for="pdfFile">Choose a PDF</label>
+      <input type="file" id="pdfFile" accept="application/pdf,.pdf">
+      <p class="hint" id="pdfInfo">No PDF chosen yet.</p>
+    </div>
+    <div class="row">
+      <div class="field"><label for="pdfRange">Pages (all, 2, or 1-3,5)</label>
+        <input type="text" id="pdfRange" value="all" autocomplete="off"></div>
+      <div class="field"><label for="pdfMode">How to print it</label>
+        <select id="pdfMode"><option value="text" selected>Reflow text (biggest text)</option><option value="page">Whole page as a picture</option></select></div>
+    </div>
+    <div id="pdfTextOpts">
+      <div class="row">
+        <div class="field"><label for="pdfPx">Text size <span id="pdfPxV"></span></label>
+          <input type="range" id="pdfPx" min="16" max="100" value="34"></div>
+        <div class="field"><label for="pdfDark">Darkness <span id="pdfDarkV"></span></label>
+          <input type="range" id="pdfDark" min="40" max="230" value="170"></div>
+      </div>
+      <div class="row" style="margin-bottom:12px">
+        <label class="chk"><input type="checkbox" id="pdfJustify" checked> Fill width (justify)</label>
+        <label class="chk"><input type="checkbox" id="pdfBold"> Bold</label>
+      </div>
+    </div>
+    <div id="pdfPicOpts" hidden>
+      <div class="row">
+        <div class="field"><label for="pdfStyle">Style</label>
+          <select id="pdfStyle"><option value="th" selected>Sharp (text, documents)</option><option value="fs">Dithered (photos)</option></select></div>
+        <label class="chk" style="align-self:center"><input type="checkbox" id="pdfTrim" checked> Trim white margins</label>
+      </div>
+    </div>
+    <div class="preview" id="pdfPrevWrap" hidden><canvas id="pdfPrev"></canvas></div>
+    <button class="pri wide" id="printPdf" disabled>Print PDF</button>
+    <p class="hint"><b>Reflow text</b> pulls the words out of the PDF and prints them at the size you choose, filling the full paper width, so it's as big and readable as possible. Use <b>Whole page</b> for PDFs with pictures, tables or scans. Needs internet the first time to load the PDF reader.</p>
+  </section>
+
+  <div class="card">
+    <button class="wide" id="printTest" disabled style="margin:0">Print test page</button>
+    <button class="pri wide" id="diag" disabled style="margin-top:10px">Run diagnosis (prints numbered samples)</button>
+    <p class="hint">Not printing right? Tap <b>Run diagnosis</b>, then in Settings → Image method pick the number of a sample that printed clearly.</p>
+    <button class="wide" id="lab" disabled style="margin-top:10px">Run printer lab (12 small probes)</button>
+    <p class="hint">Sends 12 tiny test commands one by one and logs what the printer answers. Afterwards open <b>Log</b>, copy everything and send it back along with what physically printed.</p>
+    <div class="bar" id="bar"><i></i></div>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>Settings</summary>
+      <div class="row">
+        <div class="field"><label for="paper">Paper width</label>
+          <select id="paper"><option value="384">58 mm (384 dots)</option><option value="320">48 mm printable (320)</option><option value="576">80 mm (576 dots)</option></select></div>
+        <div class="field"><label for="feed">Blank lines after print</label>
+          <input type="number" id="feed" min="0" max="20" value="3"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="chunk">Bytes per Bluetooth write</label>
+          <select id="chunk"><option>20</option><option>64</option><option>100</option><option selected>180</option><option>512</option></select></div>
+        <div class="field"><label for="delay">Delay between writes (ms)</label>
+          <input type="number" id="delay" min="0" max="200" value="40"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="wmode">Write mode</label>
+          <select id="wmode"><option value="ack">Acknowledged (reliable)</option><option value="nores">Without response (fast)</option></select></div>
+        <div class="field"><label for="density">Print darkness (start command)</label>
+          <input type="number" id="density" min="0" max="50" value="25"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="protocol">Printer language</label>
+          <select id="protocol"><option value="escpos">ESC/POS (most printers)</option><option value="cat">Cat/YHK packets (0x51 0x78)</option></select></div>
+        <label class="chk" style="align-self:center"><input type="checkbox" id="mirror"> Mirror (cat mode, if text is reversed)</label>
+      </div>
+      <div class="row">
+        <div class="field"><label for="imgMethod">Image method (use Run diagnosis to find yours)</label>
+          <select id="imgMethod"><option value="gsv1" selected>5 · GS v 0 (one row per command)</option><option value="gsv">1 · GS v 0 (single block)</option><option value="gsvb">2 · GS v 0 (24-row bands)</option><option value="esc24">3 · ESC * 24-dot</option><option value="esc8">4 · ESC * 8-dot</option></select></div>
+      </div>
+      <div class="row" style="margin-bottom:8px">
+        <label class="chk"><input type="checkbox" id="startCmd"> Send YHK start/density command</label>
+        <label class="chk"><input type="checkbox" id="rotate"> Rotate 180° (if output is upside down)</label>
+      </div>
+      <p class="hint">If the print is garbled, cut off at the bottom, or has white bands, adjust the delay (try 50–60 if the bottom is missing, lower it if you see white bands). The page automatically shrinks the write size if the printer rejects it.</p>
+    </details>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>Log</summary>
+      <pre id="log"></pre>
+    </details>
+  </div>
+</div>
+<div id="toast" role="status"></div>
+
+<script>
+(() => {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const ESC = 0x1b, GS = 0x1d;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------- storage (best effort) ---------- */
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('thermal4_' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('thermal4_' + k, JSON.stringify(v)); } catch {} }
+};
+
+/* ---------- ui helpers ---------- */
+let toastTimer;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+function log(msg, cls) {
+  const pre = $('#log'); const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = new Date().toLocaleTimeString() + '  ' + msg;
+  pre.appendChild(line); pre.scrollTop = pre.scrollHeight;
+}
+const paperDots = () => Math.max(64, Math.floor((+$('#paper').value || 384) / 8) * 8);
+const feedLines = () => Math.min(20, Math.max(0, +$('#feed').value || 0));
+const FLUSH_MS = 1500; // let the printer finish its buffer before we call it done
+
+/* ---------- settings persistence ---------- */
+['paper', 'feed', 'chunk', 'delay', 'wmode', 'density', 'imgMethod', 'protocol'].forEach(id => {
+  const el = $('#' + id); const v = store.get(id, null);
+  if (v !== null) el.value = v;
+  el.addEventListener('change', () => { store.set(id, el.value); updatePreviews(); });
+});
+['startCmd', 'rotate', 'mirror'].forEach(id => {
+  const el = $('#' + id); const v = store.get(id, null);
+  if (v !== null) el.checked = v;
+  el.addEventListener('change', () => { store.set(id, el.checked); updatePreviews(); });
+});
+
+/* ---------- transport ---------- */
+let transport = null;
+let busy = false;
+let chunkSize = +$('#chunk').value;
+$('#chunk').addEventListener('change', () => chunkSize = +$('#chunk').value);
+
+const SERVICE_16 = [0x18f0, 0xff00, 0xffe0, 0xfee7, 0xae30, 0xae00, 0xfff0, 0xffb0, 0xffc0, 0xff10, 0xfe00];
+const u16 = n => `0000${n.toString(16).padStart(4, '0')}-0000-1000-8000-00805f9b34fb`;
+const SERVICES = [...SERVICE_16.map(u16), '49535343-fe7d-4ae5-8fa9-9fafd205e455', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2'];
+const YHK_TX = '49535343-8841-43f4-a8d4-ecbe34729bb3'; // ISSC UART TX used by YHK printers
+
+function setConn(label) {
+  const on = !!label;
+  $('#status').classList.toggle('on', on);
+  $('#status .t').textContent = on ? label : 'Not connected';
+  $('#btnDisc').hidden = !on;
+  $('#btnBt').hidden = on;
+  refreshButtons();
+}
+function refreshButtons() {
+  const ok = !!transport && !busy;
+  ['printText', 'printImage', 'printQr', 'printPdf', 'printTest', 'diag', 'lab'].forEach(id => {
+    $('#' + id).disabled = !ok || (id === 'printImage' && !imgCanvas) || (id === 'printPdf' && !pdfDoc);
+  });
+}
+
+async function connectBluetooth() {
+  if (!navigator.bluetooth) { $('#unsupported').hidden = false; toast('Web Bluetooth not supported here'); return; }
+  try {
+    log('Scanning…');
+    const dev = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: SERVICES });
+    log('Selected: ' + (dev.name || dev.id));
+    dev.addEventListener('gattserverdisconnected', () => { transport = null; setConn(null); log('Printer disconnected'); toast('Printer disconnected'); });
+    const server = await dev.gatt.connect();
+    const services = await server.getPrimaryServices();
+    let best = null;
+    for (const s of services) {
+      log('Service ' + s.uuid);
+      if (/^0000180[01]-/.test(s.uuid)) continue;
+      let chars = [];
+      try { chars = await s.getCharacteristics(); } catch { continue; }
+      for (const c of chars) {
+        const p = c.properties;
+        log('  char ' + c.uuid + ' [' + ['write', 'writeWithoutResponse', 'notify'].filter(k => p[k]).join(',') + ']');
+        if (!p.write && !p.writeWithoutResponse) continue;
+        const score = (c.uuid === YHK_TX ? 100 : 0) + (SERVICES.includes(s.uuid) ? 10 : 0) + (p.write ? 2 : 0) + (p.writeWithoutResponse ? 1 : 0);
+        if (!best || score > best.score) best = { score, c };
+      }
+    }
+    if (!best) { dev.gatt.disconnect(); throw new Error('No writable characteristic found. The printer may use classic Bluetooth only.'); }
+    const c = best.c;
+    log('Using characteristic ' + c.uuid + ' (service ' + c.service.uuid + ')');
+    if (/^0000ae30-/.test(c.service.uuid) && $('#protocol').value !== 'cat') {
+      $('#protocol').value = 'cat'; store.set('protocol', 'cat');
+      log('This looks like a cat-style printer (service AE30), switched to Cat/YHK packets');
+      toast('Switched to Cat/YHK printer language');
+    }
+    // Listen to anything the printer says back (status / errors) and show it in the log
+    try {
+      const sib = (await c.service.getCharacteristics()).find(x => x.properties.notify);
+      if (sib) {
+        await sib.startNotifications();
+        sib.addEventListener('characteristicvaluechanged', e => {
+          const v = new Uint8Array(e.target.value.buffer);
+          log('Printer says: ' + [...v].map(b => b.toString(16).padStart(2, '0')).join(' ') + '   "' + [...v].map(b => b >= 32 && b < 127 ? String.fromCharCode(b) : '·').join('') + '"');
+        });
+        log('Listening on ' + sib.uuid);
+      }
+    } catch (err) { log('No notifications: ' + err.message); }
+    transport = {
+      async write(bytes) {
+        const p = c.properties, wantAck = $('#wmode').value === 'ack';
+        const useAck = p.write && (wantAck || !p.writeWithoutResponse);
+        if (useAck) return c.writeValueWithResponse ? c.writeValueWithResponse(bytes) : c.writeValue(bytes);
+        return c.writeValueWithoutResponse ? c.writeValueWithoutResponse(bytes) : c.writeValue(bytes);
+      },
+      async close() { try { dev.gatt.disconnect(); } catch {} }
+    };
+    setConn(dev.name || 'Bluetooth printer');
+    toast('Connected');
+  } catch (e) {
+    if (e && e.name === 'NotFoundError') { log('Scan cancelled'); return; }
+    log('Connect failed: ' + e.message, 'err'); toast(e.message);
+  }
+}
+
+async function disconnect() {
+  if (transport) await transport.close();
+  transport = null; setConn(null); log('Disconnected');
+}
+
+async function send(bytes, onProgress) {
+  let i = 0;
+  while (i < bytes.length) {
+    const end = Math.min(i + chunkSize, bytes.length);
+    try {
+      await transport.write(bytes.subarray(i, end));
+      i = end; onProgress && onProgress(i / bytes.length);
+    } catch (e) {
+      if (!transport) throw new Error('Printer disconnected while printing');
+      if (chunkSize > 20) {
+        chunkSize = Math.max(20, Math.floor(chunkSize / 2));
+        log('Write failed, retrying with ' + chunkSize + ' bytes', 'err');
+        await sleep(100); continue;
+      }
+      throw e;
+    }
+    const d = +$('#delay').value || 0;
+    if (d) await sleep(d);
+  }
+}
+
+async function runPrint(builder) {
+  if (!transport) { toast('Connect to the printer first'); return; }
+  if (busy) return;
+  busy = true; refreshButtons();
+  const bar = $('#bar'), fill = $('#bar i');
+  bar.classList.add('on'); fill.style.width = '0';
+  try {
+    const bytes = await builder();
+    log('Sending ' + bytes.length + ' bytes…');
+    await send(bytes, p => fill.style.width = (p * 100).toFixed(0) + '%');
+    await sleep(FLUSH_MS);
+    log('Done');
+    toast('Sent to printer');
+  } catch (e) {
+    log('Error: ' + e.message, 'err'); toast(e.message);
+  } finally {
+    busy = false; refreshButtons();
+    setTimeout(() => bar.classList.remove('on'), 600);
+  }
+}
+
+/* ---------- ESC/POS building ---------- */
+function concat(...parts) {
+  const arrs = parts.map(p => p instanceof Uint8Array ? p : Uint8Array.from(p));
+  const out = new Uint8Array(arrs.reduce((n, a) => n + a.length, 0));
+  let o = 0; for (const a of arrs) { out.set(a, o); o += a.length; }
+  return out;
+}
+const INIT = [ESC, 0x40];
+// Start of a job: reset, then (optionally) the YHK "start + density" command GS I F0 <density>
+const jobStart = () => concat(INIT, $('#startCmd').checked ? [GS, 0x49, 0xf0, Math.min(255, Math.max(0, +$('#density').value || 25))] : []);
+// Plain line feeds, which every YHK/ESC-POS printer understands
+const feedCmd = () => new Uint8Array(feedLines()).fill(0x0a);
+
+function textJob({ text, align, size, bold, underline }) {
+  const ascii = text.replace(/\r/g, '').replace(/[^\x00-\x7F]/g, '?') + '\n';
+  const body = new TextEncoder().encode(ascii);
+  return concat(jobStart(), [ESC, 0x61, align], [GS, 0x21, ((size - 1) << 4) | (size - 1)],
+    [ESC, 0x45, bold ? 1 : 0], [ESC, 0x2d, underline ? 1 : 0], body, [GS, 0x21, 0], [ESC, 0x45, 0], [ESC, 0x2d, 0], [ESC, 0x61, 0], feedCmd());
+}
+
+/* canvas -> 1-bit */
+function toBits(canvas, { mode = 'th', threshold = 128, invert = false } = {}) {
+  const w = canvas.width, h = canvas.height;
+  const { data } = canvas.getContext('2d').getImageData(0, 0, w, h);
+  const g = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const a = data[i * 4 + 3] / 255;
+    const lum = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
+    g[i] = lum * a + 255 * (1 - a);
+  }
+  const bits = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x, old = g[i], nw = old < threshold ? 0 : 255;
+      bits[i] = (nw === 0) !== invert ? 1 : 0;
+      if (mode === 'fs') {
+        const err = old - nw;
+        if (x + 1 < w) g[i + 1] += err * 7 / 16;
+        if (y + 1 < h) {
+          if (x > 0) g[i + w - 1] += err * 3 / 16;
+          g[i + w] += err * 5 / 16;
+          if (x + 1 < w) g[i + w + 1] += err / 16;
+        }
+      }
+    }
+  }
+  return { bits, w, h };
+}
+function drawBits({ bits, w, h }, canvas) {
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d'); const id = ctx.createImageData(w, h);
+  for (let i = 0; i < w * h; i++) { const v = bits[i] ? 0 : 255; id.data[i * 4] = id.data[i * 4 + 1] = id.data[i * 4 + 2] = v; id.data[i * 4 + 3] = 255; }
+  ctx.putImageData(id, 0, 0);
+}
+/* Image methods: gsv = one GS v 0 block, gsvb = GS v 0 in 24-row bands,
+   esc24 = ESC * 33 (24-dot stripes), esc8 = ESC * 1 (8-dot stripes) */
+function escStar({ bits, w, h }, m, stripe) {
+  const bpc = stripe / 8, out = [new Uint8Array([ESC, 0x33, stripe])];
+  for (let y0 = 0; y0 < h; y0 += stripe) {
+    const buf = new Uint8Array(5 + w * bpc + 1);
+    buf.set([ESC, 0x2a, m, w & 255, w >> 8]);
+    let o = 5;
+    for (let x = 0; x < w; x++) {
+      for (let k = 0; k < bpc; k++) {
+        let b = 0;
+        for (let j = 0; j < 8; j++) { const y = y0 + k * 8 + j; if (y < h && bits[y * w + x]) b |= 0x80 >> j; }
+        buf[o++] = b;
+      }
+    }
+    buf[o] = 0x0a; out.push(buf);
+  }
+  out.push(new Uint8Array([ESC, 0x32]));
+  return concat(...out);
+}
+function rasterBytes(img, method = 'gsv') {
+  if (method === 'esc24') return escStar(img, 33, 24);
+  if (method === 'esc8') return escStar(img, 1, 8);
+  if (method === 'gsv1') return gsvBytes(img, 1); // this printer prints only one row per GS v 0 command
+  return gsvBytes(img, method === 'gsvb' ? 24 : 65535);
+}
+function gsvBytes({ bits, w, h }, band) {
+  const bpr = Math.ceil(w / 8), out = [];
+  for (let y0 = 0; y0 < h; y0 += band) {
+    const rows = Math.min(band, h - y0);
+    const buf = new Uint8Array(8 + bpr * rows);
+    buf.set([GS, 0x76, 0x30, 0x00, bpr & 255, bpr >> 8, rows & 255, rows >> 8]);
+    let o = 8;
+    for (let y = 0; y < rows; y++) {
+      for (let bx = 0; bx < bpr; bx++) {
+        let b = 0;
+        for (let k = 0; k < 8; k++) { const x = bx * 8 + k; if (x < w && bits[(y0 + y) * w + x]) b |= 0x80 >> k; }
+        buf[o++] = b;
+      }
+    }
+    out.push(buf);
+  }
+  return concat(...out);
+}
+/* Cat/YHK packet protocol: 51 78 <cmd> 00 <len lo> <len hi> <payload> <crc8 of payload> FF */
+function crc8(d) {
+  let c = 0;
+  for (const b of d) { c ^= b; for (let i = 0; i < 8; i++) c = (c & 0x80) ? ((c << 1) ^ 0x07) & 0xff : (c << 1) & 0xff; }
+  return c;
+}
+function pkt(cmd, payload) {
+  const p = Uint8Array.from(payload);
+  return concat([0x51, 0x78, cmd, 0x00, p.length & 255, p.length >> 8], p, [crc8(p), 0xff]);
+}
+function catJob({ bits, w, h }) {
+  const density = Math.min(50, Math.max(0, +$('#density').value || 25));
+  const energy = 8000 + density * 640; // 25 -> 24000 (0x5DC0)
+  const lsb = !$('#mirror').checked, bpr = Math.ceil(w / 8), parts = [
+    pkt(0xa4, [0x32]),
+    pkt(0xa6, [0xaa, 0x55, 0x17, 0x38, 0x44, 0x5f, 0x5f, 0x5f, 0x44, 0x38, 0x2c]),
+    pkt(0xaf, [energy & 255, energy >> 8]),
+    pkt(0xbe, [0x01])
+  ];
+  for (let y = 0; y < h; y++) {
+    const row = new Uint8Array(bpr);
+    for (let x = 0; x < w; x++) if (bits[y * w + x]) row[x >> 3] |= lsb ? (1 << (x & 7)) : (0x80 >> (x & 7));
+    parts.push(pkt(0xa2, row));
+  }
+  const feed = Math.max(30, feedLines() * 12);
+  parts.push(pkt(0xa1, [feed & 255, feed >> 8]));
+  parts.push(pkt(0xa6, [0xaa, 0x55, 0x17, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x17]));
+  return concat(...parts);
+}
+function rasterJob(canvas, opts, method = $('#imgMethod').value) {
+  const img = toBits(canvas, opts);
+  if ($('#rotate').checked) img.bits.reverse(); // reversing w*h pixels = 180° rotation
+  if ($('#protocol').value === 'cat') return catJob(img);
+  return concat(jobStart(), rasterBytes(img, method), feedCmd());
+}
+
+/* ---------- canvas builders ---------- */
+function wrapLines(text, ctx, maxW) {
+  const lines = [];
+  for (const para of text.replace(/\r/g, '').split('\n')) {
+    if (!para) { lines.push(''); continue; }
+    const words = para.split(/(\s+)/); let cur = '';
+    for (const word of words) {
+      if (ctx.measureText(cur + word).width <= maxW) { cur += word; continue; }
+      if (cur.trim()) { lines.push(cur.trimEnd()); cur = ''; }
+      if (ctx.measureText(word).width <= maxW) { cur = word.trimStart(); continue; }
+      for (const ch of word) { // very long word / no spaces: break by character
+        if (ctx.measureText(cur + ch).width > maxW && cur) { lines.push(cur); cur = ''; }
+        cur += ch;
+      }
+    }
+    lines.push(cur.trimEnd());
+  }
+  return lines;
+}
+function textCanvas(text, { align = 0, size = 1, bold = false, width = paperDots(), px = 26 } = {}) {
+  const fam = '"Noto Sans","Noto Sans Devanagari","Segoe UI",system-ui,sans-serif', wt = bold ? '700 ' : '400 ';
+  const m = document.createElement('canvas').getContext('2d');
+  const paras = text.replace(/\r/g, '').split('\n');
+  let fontPx = px * size;
+  if (size === 0) { // "Fit to width": scale the text so the longest line spans the full paper width
+    m.font = `${wt}100px ${fam}`;
+    const widest = Math.max(1, ...paras.map(p => m.measureText(p).width));
+    fontPx = Math.min(160, Math.max(10, 100 * width / widest));
+  }
+  const font = `${wt}${fontPx}px ${fam}`; m.font = font;
+  const pad = 0, lh = Math.round(fontPx * 1.3), lines = [];
+  for (const p of paras) { const ls = wrapLines(p, m, width - pad * 2); ls.forEach((t, i) => lines.push({ t, last: i === ls.length - 1 })); }
+  const c = document.createElement('canvas'); c.width = width; c.height = Math.max(lh, lines.length * lh + pad * 2);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.fillStyle = '#000'; ctx.font = font; ctx.textBaseline = 'top';
+  ctx.textAlign = align === 1 ? 'center' : align === 2 ? 'right' : 'left';
+  const x = align === 1 ? width / 2 : align === 2 ? width - pad : pad;
+  lines.forEach(({ t, last }, i) => {
+    const y = pad + i * lh, words = t.split(' ').filter(Boolean);
+    if (align === 3 && !last && words.length > 1) { // justify: stretch the gaps so the line fills the full width
+      ctx.textAlign = 'left';
+      const gap = (width - words.reduce((n, w) => n + ctx.measureText(w).width, 0)) / (words.length - 1);
+      let cx = 0; words.forEach(w => { ctx.fillText(w, cx, y); cx += ctx.measureText(w).width + gap; });
+    } else { ctx.textAlign = align === 1 ? 'center' : align === 2 ? 'right' : 'left'; ctx.fillText(t, x, y); }
+  });
+  return c;
+}
+function stack(canvases, gap = 4) {
+  const w = paperDots(), h = canvases.reduce((n, c) => n + c.height + gap, -gap);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+  let y = 0; for (const s of canvases) { ctx.drawImage(s, Math.round((w - s.width) / 2), y); y += s.height + gap; }
+  return c;
+}
+
+/* ---------- text tab ---------- */
+function textOpts() {
+  return { text: $('#txt').value, align: +$('#align').value, size: +$('#size').value, bold: $('#bold').checked, underline: $('#underline').checked };
+}
+function textUsesImage(o) {
+  const mode = $('#txtMode').value;
+  if ($('#protocol').value === 'cat') return true; // cat printers only understand bitmaps
+  if (o.size === 0 || o.align === 3) return true; // fit-to-width and justify need the image path
+  return mode === 'image' || (mode === 'auto' && /[^\x00-\x7F]/.test(o.text));
+}
+function textBuilder() {
+  const o = textOpts();
+  if (!o.text.trim()) throw new Error('Nothing to print');
+  if (textUsesImage(o)) return rasterJob(textCanvas(o.text, o), { mode: 'th', threshold: 150 });
+  return textJob(o);
+}
+$('#printText').onclick = () => runPrint(async () => textBuilder());
+
+/* ---------- image tab ---------- */
+let imgCanvas = null;
+$('#file').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  const url = URL.createObjectURL(f), img = new Image();
+  img.onload = () => {
+    const w = paperDots(), h = Math.min(4000, Math.max(1, Math.round(img.height * w / img.width)));
+    imgCanvas = document.createElement('canvas'); imgCanvas.width = w; imgCanvas.height = h;
+    const ctx = imgCanvas.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); ctx.drawImage(img, 0, 0, w, h);
+    URL.revokeObjectURL(url); refreshButtons(); updatePreviews(); log('Image loaded ' + w + '×' + h);
+  };
+  img.onerror = () => { toast('Could not read that image'); URL.revokeObjectURL(url); };
+  img.src = url;
+});
+const imgOpts = () => ({ mode: $('#dither').value, threshold: +$('#dark').value, invert: $('#invert').checked });
+$('#printImage').onclick = () => runPrint(async () => {
+  if (!imgCanvas) throw new Error('Choose an image first');
+  return rasterJob(imgCanvas, imgOpts());
+});
+
+/* ---------- QR tab ---------- */
+function loadQrLib() {
+  if (window.qrcode) return Promise.resolve(true);
+  return new Promise(res => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+    s.onload = () => res(!!window.qrcode); s.onerror = () => res(false);
+    document.head.appendChild(s);
+  });
+}
+async function qrCanvas() {
+  const text = $('#qrText').value; if (!text) return null;
+  if (!(await loadQrLib())) return null;
+  const qr = window.qrcode(0, 'M'); qr.addData(text); qr.make();
+  const n = qr.getModuleCount(), quiet = 0; // edge to edge: the blank paper around it acts as the quiet zone
+  let s = +$('#qrSize').value; const maxS = Math.floor(paperDots() / (n + quiet * 2)); s = Math.max(1, Math.min(s, maxS));
+  const side = (n + quiet * 2) * s, c = document.createElement('canvas'); c.width = c.height = side;
+  const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, side, side); ctx.fillStyle = '#000';
+  for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (qr.isDark(r, k)) ctx.fillRect((k + quiet) * s, (r + quiet) * s, s, s);
+  const parts = [c], cap = $('#qrCap').value.trim();
+  if (cap) parts.push(textCanvas(cap, { align: 1, size: 1, bold: true }));
+  return stack(parts);
+}
+function nativeQr(text, size) {
+  const d = new TextEncoder().encode(text), len = d.length + 3;
+  return concat(jobStart(), [ESC, 0x61, 1],
+    [GS, 0x28, 0x6b, 4, 0, 0x31, 0x41, 0x32, 0], [GS, 0x28, 0x6b, 3, 0, 0x31, 0x43, size],
+    [GS, 0x28, 0x6b, 3, 0, 0x31, 0x45, 0x31], [GS, 0x28, 0x6b, len & 255, len >> 8, 0x31, 0x50, 0x30], d,
+    [GS, 0x28, 0x6b, 3, 0, 0x31, 0x51, 0x30], [0x0a], [ESC, 0x61, 0], feedCmd());
+}
+$('#printQr').onclick = () => runPrint(async () => {
+  const text = $('#qrText').value; if (!text) throw new Error('Enter some text for the QR code');
+  const c = await qrCanvas();
+  if (c) return rasterJob(c, { mode: 'th', threshold: 128 });
+  if ($('#protocol').value === 'cat') throw new Error('QR needs an internet connection for the QR library in this printer mode');
+  log('QR library unavailable (offline?) — using the printer\u2019s built-in QR command', 'err');
+  return nativeQr(text, Math.min(16, +$('#qrSize').value + 1));
+});
+
+/* ---------- test page ---------- */
+function testCanvas() {
+  const w = paperDots(), c = document.createElement('canvas'); c.width = w; c.height = 330;
+  const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, 330);
+  ctx.fillStyle = '#000'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.strokeRect(1.5, 1.5, w - 3, 327);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.font = '700 32px system-ui,sans-serif'; ctx.fillText('PRINTER TEST', w / 2, 14);
+  ctx.font = '20px system-ui,sans-serif'; ctx.fillText(new Date().toLocaleString(), w / 2, 56);
+  ctx.fillText(w + ' dots wide', w / 2, 82);
+  const g = ctx.createLinearGradient(10, 0, w - 10, 0); g.addColorStop(0, '#000'); g.addColorStop(1, '#fff');
+  ctx.fillStyle = g; ctx.fillRect(10, 118, w - 20, 60);
+  ctx.fillStyle = '#000'; for (let x = 10; x < w - 10; x += 16) for (let y = 0; y < 2; y++) if (((x - 10) / 16 + y) % 2 === 0) ctx.fillRect(x, 190 + y * 16, 16, 16);
+  ctx.fillStyle = '#000'; ctx.font = '22px "Noto Sans Devanagari",system-ui,sans-serif'; ctx.fillText('Hello! नमस्ते', w / 2, 240);
+  ctx.font = '16px system-ui,sans-serif'; ctx.fillText('If you can read this, it works.', w / 2, 284);
+  return c;
+}
+$('#printTest').onclick = () => runPrint(async () => rasterJob(testCanvas(), { mode: 'fs', threshold: 128 }));
+
+/* ---------- diagnosis ---------- */
+function diagCanvas(label) {
+  const w = paperDots(), c = document.createElement('canvas'); c.width = w; c.height = 72;
+  const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, 72);
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, 6); ctx.fillRect(0, 66, w, 6);
+  ctx.font = '700 44px system-ui,sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+  ctx.fillText('SAMPLE ' + label, w / 2, 37);
+  return c;
+}
+$('#diag').onclick = () => runPrint(async () => {
+  const cat = $('#protocol').value === 'cat';
+  const parts = cat ? [] : [concat(jobStart(), new TextEncoder().encode('SAMPLE 0: plain text\n'), feedCmd())];
+  const methods = cat ? [['gsv', '1']] : [['gsv1', '5'], ['gsv', '1'], ['gsvb', '2'], ['esc24', '3'], ['esc8', '4']];
+  methods.forEach(([m, n]) => parts.push(rasterJob(diagCanvas(n), { mode: 'th', threshold: 128 }, m)));
+  log('Diagnosis: sample 0 = plain text, samples 1-4 = image methods');
+  return concat(...parts);
+});
+
+/* ---------- PDF tab (pdf.js renders each page to a picture, then it prints like any image) ---------- */
+let pdfDoc = null, pdfPrevCache = null;
+const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+function loadPdfLib() {
+  if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions.workerSrc) return Promise.resolve(true);
+  return new Promise(res => {
+    const s = document.createElement('script');
+    s.src = PDFJS + 'pdf.min.js';
+    s.onerror = () => res(false);
+    s.onload = async () => {
+      try { // load the worker through a blob so the browser doesn't block it as cross-origin
+        const r = await fetch(PDFJS + 'pdf.worker.min.js');
+        const blob = new Blob([await r.text()], { type: 'text/javascript' });
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+        res(true);
+      } catch { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js'; res(true); }
+    };
+    document.head.appendChild(s);
+  });
+}
+function parseRange(str, max) {
+  const s = (str || '').trim().toLowerCase();
+  if (!s || s === 'all') return Array.from({ length: Math.min(max, 40) }, (_, i) => i + 1);
+  const out = [];
+  for (const part of s.split(',')) {
+    const m = part.trim().match(/^(\d+)(?:\s*-\s*(\d+))?$/); if (!m) continue;
+    let a = +m[1], b = m[2] ? +m[2] : a; if (a > b) [a, b] = [b, a];
+    for (let p = Math.max(1, a); p <= Math.min(max, b); p++) if (!out.includes(p)) out.push(p);
+  }
+  return out.slice(0, 40);
+}
+async function renderPdfPage(n) {
+  const page = await pdfDoc.getPage(n), trim = $('#pdfTrim').checked, W = paperDots();
+  const base = page.getViewport({ scale: 1 }), scale = (trim ? W * 2.5 : W) / base.width, vp = page.getViewport({ scale });
+  const src = document.createElement('canvas'); src.width = Math.ceil(vp.width); src.height = Math.ceil(vp.height);
+  const sctx = src.getContext('2d'); sctx.fillStyle = '#fff'; sctx.fillRect(0, 0, src.width, src.height);
+  await page.render({ canvasContext: sctx, viewport: vp }).promise;
+  let sx = 0, sy = 0, cw = src.width, ch = src.height;
+  if (trim) {
+    const { data } = sctx.getImageData(0, 0, src.width, src.height);
+    let x0 = src.width, x1 = -1, y0 = src.height, y1 = -1;
+    for (let y = 0; y < src.height; y++) for (let x = 0; x < src.width; x++) {
+      const i = (y * src.width + x) * 4;
+      if (data[i] < 235 || data[i + 1] < 235 || data[i + 2] < 235) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+    if (x1 >= 0) { const pad = 6; sx = Math.max(0, x0 - pad); sy = Math.max(0, y0 - pad); cw = Math.min(src.width, x1 + pad) - sx; ch = Math.min(src.height, y1 + pad) - sy; }
+  }
+  const out = document.createElement('canvas'); out.width = W; out.height = Math.max(1, Math.round(ch * W / cw));
+  const octx = out.getContext('2d'); octx.fillStyle = '#fff'; octx.fillRect(0, 0, out.width, out.height);
+  octx.imageSmoothingQuality = 'high'; octx.drawImage(src, sx, sy, cw, ch, 0, 0, out.width, out.height);
+  return out;
+}
+const pdfOpts = () => ({ mode: $('#pdfStyle').value, threshold: +$('#pdfDark').value, invert: false });
+// Pull the words out of a page and rebuild paragraphs (lines that belong together are joined)
+async function pdfPageText(n) {
+  const tc = await (await pdfDoc.getPage(n)).getTextContent();
+  const lines = [];
+  for (const it of tc.items) {
+    if (it.str === undefined || !it.transform) continue;
+    const x = it.transform[4], y = it.transform[5], h = it.height || 10;
+    let ln = lines.find(l => Math.abs(l.y - y) <= Math.max(2, h * 0.4));
+    if (!ln) { ln = { y, h, parts: [] }; lines.push(ln); }
+    ln.parts.push({ x, s: it.str, w: it.width || 0 });
+  }
+  lines.sort((a, b) => b.y - a.y);
+  const paras = []; let cur = '', prevY = null;
+  const flush = () => { if (cur.trim()) paras.push(cur.trim()); cur = ''; };
+  for (const ln of lines) {
+    ln.parts.sort((a, b) => a.x - b.x);
+    let s = '', end = null;
+    for (const p of ln.parts) { if (end !== null && p.x - end > 1.5 && !s.endsWith(' ') && !p.s.startsWith(' ')) s += ' '; s += p.s; end = p.x + p.w; }
+    s = s.replace(/\s+/g, ' ').trim(); if (!s) continue;
+    if (prevY !== null && prevY - ln.y > ln.h * 1.8) flush(); // a bigger gap means a new paragraph
+    cur = cur ? (/[-‐]$/.test(cur) ? cur.slice(0, -1) + s : cur + ' ' + s) : s;
+    prevY = ln.y;
+  }
+  flush();
+  return paras.join('\n\n');
+}
+async function pdfTextCanvas(pages) {
+  let text = '';
+  for (const n of pages) text += (text ? '\n\n' : '') + await pdfPageText(n);
+  if (!text.trim()) throw new Error('No selectable text in this PDF (it may be a scan). Switch to "Whole page as a picture".');
+  return textCanvas(text, { align: $('#pdfJustify').checked ? 3 : 0, size: 1, bold: $('#pdfBold').checked, px: +$('#pdfPx').value });
+}
+$('#pdfFile').addEventListener('change', async e => {
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  try {
+    toast('Opening PDF…');
+    if (!(await loadPdfLib())) throw new Error('Could not load the PDF reader. Connect to the internet and try again.');
+    pdfDoc = await window.pdfjsLib.getDocument({ data: new Uint8Array(await f.arrayBuffer()) }).promise;
+    pdfPrevCache = null;
+    $('#pdfInfo').textContent = f.name + ' · ' + pdfDoc.numPages + ' page' + (pdfDoc.numPages === 1 ? '' : 's');
+    log('PDF loaded: ' + f.name + ' (' + pdfDoc.numPages + ' pages)');
+    refreshButtons(); updatePreviews();
+  } catch (err) {
+    pdfDoc = null; $('#pdfInfo').textContent = 'Could not open that PDF.';
+    log('PDF error: ' + err.message, 'err'); toast(err.message); refreshButtons();
+  }
+});
+$('#printPdf').onclick = () => runPrint(async () => {
+  if (!pdfDoc) throw new Error('Choose a PDF first');
+  const pages = parseRange($('#pdfRange').value, pdfDoc.numPages);
+  if (!pages.length) throw new Error('No valid pages in the page box');
+  if ($('#pdfMode').value === 'text') return rasterJob(await pdfTextCanvas(pages), { mode: 'th', threshold: +$('#pdfDark').value });
+  const parts = [];
+  for (let i = 0; i < pages.length; i++) {
+    log('Rendering page ' + pages[i] + ' (' + (i + 1) + '/' + pages.length + ')');
+    parts.push(rasterJob(await renderPdfPage(pages[i]), pdfOpts()));
+  }
+  return concat(...parts);
+});
+
+/* ---------- printer lab: tiny probes, one at a time, each logged with a number ---------- */
+const hexs = b => [...b].map(x => x.toString(16).padStart(2, '0')).join(' ');
+const asc = s => new TextEncoder().encode(s);
+function gsvBlock(rows, rowFn) {
+  const bpr = 48, d = new Uint8Array(8 + bpr * rows);
+  d.set([GS, 0x76, 0x30, 0x00, bpr, 0, rows & 255, rows >> 8]);
+  for (let y = 0; y < rows; y++) for (let x = 0; x < bpr; x++) d[8 + y * bpr + x] = rowFn(y, x);
+  return d;
+}
+async function runSteps(steps) {
+  if (!transport) { toast('Connect to the printer first'); return; }
+  if (busy) return;
+  busy = true; refreshButtons();
+  try {
+    for (let i = 0; i < steps.length; i++) {
+      const s = steps[i];
+      log(`LAB ${i + 1}/${steps.length} ${s.name}  [${s.bytes.length} bytes: ${hexs(s.bytes.slice(0, 16))}${s.bytes.length > 16 ? ' …' : ''}]`);
+      await send(s.bytes);
+      await sleep(s.wait || 2500);
+    }
+    log('LAB finished'); toast('Lab finished — now copy the Log');
+  } catch (e) { log('Error: ' + e.message, 'err'); toast(e.message); }
+  finally { busy = false; refreshButtons(); }
+}
+$('#lab').onclick = () => runSteps([
+  { name: 'plain text, no init', bytes: concat(asc('LAB1 HELLO\n\n\n')) },
+  { name: 'ESC @ then text', bytes: concat([ESC, 0x40], asc('LAB2 HELLO\n\n\n')) },
+  { name: 'status DLE EOT 1', bytes: Uint8Array.from([0x10, 0x04, 0x01]), wait: 1500 },
+  { name: 'printer id GS I 1', bytes: Uint8Array.from([GS, 0x49, 0x01]), wait: 1500 },
+  { name: 'printer id GS I 2', bytes: Uint8Array.from([GS, 0x49, 0x02]), wait: 1500 },
+  { name: 'start/density command alone', bytes: Uint8Array.from([GS, 0x49, 0xf0, 0x19]), wait: 1500 },
+  { name: 'solid black block, GS v 0, 48 rows', bytes: concat([ESC, 0x40], gsvBlock(48, () => 0xff), [0x0a, 0x0a, 0x0a]) },
+  { name: 'vertical stripes, GS v 0, 48 rows', bytes: concat([ESC, 0x40], gsvBlock(48, () => 0xcc), [0x0a, 0x0a, 0x0a]) },
+  { name: 'left half black, GS v 0, 48 rows', bytes: concat([ESC, 0x40], gsvBlock(48, (y, x) => x < 24 ? 0xff : 0x00), [0x0a, 0x0a, 0x0a]) },
+  { name: 'solid block, ESC * 24-dot', bytes: concat([ESC, 0x40], [ESC, 0x33, 24], (() => { const o = [ESC, 0x2a, 33, 128, 1]; const d = new Uint8Array(5 + 384 * 3 + 1); d.set(o); d.fill(0xff, 5, 5 + 384 * 3); d[5 + 384 * 3] = 0x0a; return d; })(), [ESC, 0x32]) },
+  { name: 'solid block, GS v 0 with density cmd first', bytes: concat([ESC, 0x40, GS, 0x49, 0xf0, 0x19], gsvBlock(48, () => 0xff), [0x0a, 0x0a, 0x0a]) },
+  { name: 'text with CR LF and form feed', bytes: concat([ESC, 0x40], asc('LAB12 DONE\r\n\r\n\r\n'), [0x0c]) }
+]);
+
+/* ---------- previews ---------- */
+let prevTimer;
+function updatePreviews() { clearTimeout(prevTimer); prevTimer = setTimeout(doPreviews, 120); }
+async function doPreviews() {
+  $('#darkV').textContent = $('#dark').value;
+  $('#qrSizeV').textContent = $('#qrSize').value;
+  const active = ($('.tabs [aria-selected=true]') || {}).dataset?.tab;
+  if (active === 'text') {
+    const o = textOpts(), wrap = $('#txtPrevWrap');
+    if (o.text.trim() && textUsesImage(o)) { drawBits(toBits(textCanvas(o.text, o), { mode: 'th', threshold: 150 }), $('#txtPrev')); wrap.hidden = false; }
+    else wrap.hidden = true;
+  } else if (active === 'image') {
+    const wrap = $('#imgPrevWrap');
+    if (imgCanvas) { drawBits(toBits(imgCanvas, imgOpts()), $('#imgPrev')); wrap.hidden = false; } else wrap.hidden = true;
+  } else if (active === 'qr') {
+    const c = await qrCanvas(), wrap = $('#qrPrevWrap');
+    if (c) { drawBits(toBits(c, { mode: 'th', threshold: 128 }), $('#qrPrev')); wrap.hidden = false; } else wrap.hidden = true;
+  } else if (active === 'pdf') {
+    $('#pdfDarkV').textContent = $('#pdfDark').value;
+    $('#pdfPxV').textContent = $('#pdfPx').value;
+    const textMode = $('#pdfMode').value === 'text';
+    $('#pdfTextOpts').hidden = !textMode; $('#pdfPicOpts').hidden = textMode;
+    const wrap = $('#pdfPrevWrap');
+    if (!pdfDoc) { wrap.hidden = true; return; }
+    try {
+      const pages = parseRange($('#pdfRange').value, pdfDoc.numPages);
+      if (!pages.length) { wrap.hidden = true; return; }
+      if (textMode) {
+        const tcv = await pdfTextCanvas(pages.slice(0, 1));
+        drawBits(toBits(tcv, { mode: 'th', threshold: +$('#pdfDark').value }), $('#pdfPrev')); wrap.hidden = false; return;
+      }
+      const key = pages[0] + '|' + $('#pdfTrim').checked + '|' + paperDots();
+      if (!pdfPrevCache || pdfPrevCache.key !== key) pdfPrevCache = { key, canvas: await renderPdfPage(pages[0]) };
+      drawBits(toBits(pdfPrevCache.canvas, pdfOpts()), $('#pdfPrev')); wrap.hidden = false;
+    } catch (err) { log('PDF preview error: ' + err.message, 'err'); wrap.hidden = true; }
+  }
+}
+['txt', 'align', 'size', 'txtMode', 'bold', 'underline', 'dither', 'dark', 'invert', 'qrText', 'qrSize', 'qrCap', 'pdfRange', 'pdfStyle', 'pdfDark', 'pdfTrim', 'pdfMode', 'pdfPx', 'pdfJustify', 'pdfBold']
+  .forEach(id => { const el = $('#' + id); el.addEventListener('input', updatePreviews); el.addEventListener('change', updatePreviews); });
+
+/* ---------- tabs ---------- */
+$$('.tabs button').forEach(b => b.addEventListener('click', () => {
+  $$('.tabs button').forEach(x => x.setAttribute('aria-selected', x === b));
+  ['text', 'image', 'qr', 'pdf'].forEach(t => $('#p-' + t).hidden = t !== b.dataset.tab);
+  updatePreviews();
+}));
+
+/* ---------- init ---------- */
+$('#btnBt').onclick = connectBluetooth;
+$('#btnDisc').onclick = disconnect;
+if (!navigator.bluetooth) $('#unsupported').hidden = false;
+setConn(null); updatePreviews();
+})();
+</script>
+</body>
+</html>
