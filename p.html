@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thermal Print</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#14181f;--mut:#667085;--line:#e3e6eb;--acc:#0f766e;--accInk:#fff;--err:#b42318;--ok:#067647;--soft:#eef2f1}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#171a21;--ink:#eef0f4;--mut:#98a2b3;--line:#272c36;--acc:#2dd4bf;--accInk:#04201d;--err:#f97066;--ok:#47cd89;--soft:#1e232c}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans","Noto Sans Devanagari",sans-serif}
+.wrap{max-width:640px;margin:0 auto;padding:16px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 14px}
+h1{font-size:20px;margin:0;letter-spacing:-.01em}
+.pill{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--mut);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:5px 12px;max-width:60%}
+.pill span.t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dot{width:9px;height:9px;border-radius:50%;background:#98a2b3;flex:none}
+.pill.on .dot{background:var(--ok)}
+.pill.on{color:var(--ink)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+.row{display:flex;flex-wrap:wrap;gap:10px}
+.row>*{flex:1 1 140px}
+label{display:block;font-size:13px;color:var(--mut);margin:0 0 4px}
+.field{margin-bottom:12px}
+input[type=text],input[type=number],select,textarea{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+textarea{min-height:140px;resize:vertical}
+input[type=range]{width:100%;accent-color:var(--acc)}
+input[type=file]{width:100%;font:inherit;color:var(--mut)}
+.chk{display:flex;align-items:center;gap:8px;font-size:15px;color:var(--ink);margin:0}
+.chk input{width:18px;height:18px;accent-color:var(--acc)}
+button{font:inherit;font-weight:600;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:11px 16px;cursor:pointer}
+button.pri{background:var(--acc);border-color:var(--acc);color:var(--accInk)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.wide{width:100%;margin-top:4px}
+.tabs{display:flex;gap:6px;background:var(--soft);padding:4px;border-radius:12px;margin-bottom:14px}
+.tabs button{flex:1;border:0;background:transparent;padding:9px 6px;color:var(--mut)}
+.tabs button[aria-selected=true]{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.panel[hidden]{display:none}
+.preview{background:#fff;border:1px dashed var(--line);border-radius:10px;padding:8px;margin:6px 0 12px;text-align:center;overflow:auto;max-height:420px}
+.preview canvas{max-width:100%;image-rendering:pixelated;background:#fff}
+.hint{font-size:13px;color:var(--mut);margin:8px 0 0}
+.warn{background:#fff4e5;color:#7a4b00;border:1px solid #ffd8a6;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:14px}
+@media (prefers-color-scheme:dark){.warn{background:#2a2111;color:#f2c97d;border-color:#4a3a18}}
+.bar{height:4px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:12px;opacity:0;transition:opacity .2s}
+.bar.on{opacity:1}
+.bar i{display:block;height:100%;width:0;background:var(--acc);transition:width .1s}
+details summary{cursor:pointer;font-weight:600}
+details[open] summary{margin-bottom:12px}
+pre#log{margin:0;max-height:200px;overflow:auto;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;color:var(--mut);white-space:pre-wrap}
+pre#log .err{color:var(--err)}
+#toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,20px);background:#111;color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;max-width:90vw;z-index:9}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Thermal Print</h1>
+    <div class="pill" id="status"><i class="dot"></i><span class="t">Not connected</span></div>
+  </header>
+
+  <div class="warn" id="unsupported" hidden>
+    Web Bluetooth isn't available in this browser. Use <b>Chrome or Edge</b> on Android, Windows, macOS or Linux (not iOS, Safari or Firefox), and open this page over https or as a local file.
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <button class="pri" id="btnBt">Connect via Bluetooth</button>
+      <button id="btnDisc" hidden>Disconnect</button>
+    </div>
+    <p class="hint">Turn the printer on, keep it close, and pick <b>YHK-B280</b> (or whatever name it shows) in the list.</p>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-tab="text">Text</button>
+    <button role="tab" aria-selected="false" data-tab="image">Image</button>
+    <button role="tab" aria-selected="false" data-tab="qr">QR code</button>
+    <button role="tab" aria-selected="false" data-tab="pdf">PDF</button>
+  </div>
+
+  <!-- TEXT -->
+  <section class="card panel" id="p-text">
+    <div class="field">
+      <label for="txt">Text to print</label>
+      <textarea id="txt" placeholder="Type or paste here…">Hello from my browser!
+नमस्ते 🙏
+
+Item A ........ 50.00
+Item B ........ 25.00
+------------------------
+TOTAL ......... 75.00</textarea>
+    </div>
+    <div class="row">
+      <div class="field"><label for="align">Align</label>
+        <select id="align"><option value="0">Left</option><option value="1">Center</option><option value="2">Right</option><option value="3">Justify (fill width)</option></select></div>
+      <div class="field"><label for="size">Size</label>
+        <select id="size"><option value="0">Fit to width</option><option value="1" selected>Normal</option><option value="2">Double</option><option value="3">Triple</option></select></div>
+      <div class="field"><label for="txtMode">Print mode</label>
+        <select id="txtMode"><option value="image" selected>As image (works on every printer)</option><option value="auto">Auto</option><option value="native">Printer text (fast)</option></select></div>
+    </div>
+    <div class="row" style="margin-bottom:12px">
+      <label class="chk"><input type="checkbox" id="bold"> Bold</label>
+      <label class="chk"><input type="checkbox" id="underline"> Underline</label>
+    </div>
+    <div class="preview" id="txtPrevWrap" hidden><canvas id="txtPrev"></canvas></div>
+    <button class="pri wide" id="printText" disabled>Print text</button>
+    <p class="hint">Auto switches to image mode when your text has non-English characters (Hindi, emoji, etc.), since most mini printers can't render those natively.</p>
+  </section>
+
+  <!-- IMAGE -->
+  <section class="card panel" id="p-image" hidden>
+    <div class="field">
+      <label for="file">Choose a picture</label>
+      <input type="file" id="file" accept="image/*">
+    </div>
+    <div class="row">
+      <div class="field"><label for="dither">Style</label>
+        <select id="dither"><option value="fs">Photo (dithered)</option><option value="th">Logo / text (sharp)</option></select></div>
+      <div class="field"><label for="dark">Darkness <span id="darkV"></span></label>
+        <input type="range" id="dark" min="40" max="220" value="128"></div>
+    </div>
+    <label class="chk" style="margin-bottom:8px"><input type="checkbox" id="invert"> Invert (white on black)</label>
+    <div class="preview" id="imgPrevWrap" hidden><canvas id="imgPrev"></canvas></div>
+    <button class="pri wide" id="printImage" disabled>Print image</button>
+  </section>
+
+  <!-- QR -->
+  <section class="card panel" id="p-qr" hidden>
+    <div class="field">
+      <label for="qrText">Text or link</label>
+      <input type="text" id="qrText" value="https://example.com" autocomplete="off">
+    </div>
+    <div class="row">
+      <div class="field"><label for="qrSize">Size <span id="qrSizeV"></span></label>
+        <input type="range" id="qrSize" min="3" max="10" value="7"></div>
+      <div class="field"><label for="qrCap">Caption (optional)</label>
+        <input type="text" id="qrCap" placeholder="Scan me" autocomplete="off"></div>
+    </div>
+    <div class="preview" id="qrPrevWrap"><canvas id="qrPrev"></canvas></div>
+    <button class="pri wide" id="printQr" disabled>Print QR code</button>
+  </section>
+
+  <!-- PDF -->
+  <section class="card panel" id="p-pdf" hidden>
+    <div class="field">
+      <label for="pdfFile">Choose a PDF</label>
+      <input type="file" id="pdfFile" accept="application/pdf,.pdf">
+      <p class="hint" id="pdfInfo">No PDF chosen yet.</p>
+    </div>
+    <div class="row">
+      <div class="field"><label for="pdfRange">Pages (all, 2, or 1-3,5)</label>
+        <input type="text" id="pdfRange" value="all" autocomplete="off"></div>
+      <div class="field"><label for="pdfMode">How to print it</label>
+        <select id="pdfMode"><option value="text" selected>Reflow text (biggest text)</option><option value="page">Whole page as a picture</option></select></div>
+    </div>
+    <div id="pdfTextOpts">
+      <div class="row">
+        <div class="field"><label for="pdfPx">Text size <span id="pdfPxV"></span></label>
+          <input type="range" id="pdfPx" min="20" max="72" value="34"></div>
+        <div class="field"><label for="pdfDark">Darkness <span id="pdfDarkV"></span></label>
+          <input type="range" id="pdfDark" min="40" max="230" value="170"></div>
+      </div>
+      <div class="row" style="margin-bottom:12px">
+        <label class="chk"><input type="checkbox" id="pdfJustify" checked> Fill width (justify)</label>
+        <label class="chk"><input type="checkbox" id="pdfBold"> Bold</label>
+      </div>
+    </div>
+    <div id="pdfPicOpts" hidden>
+      <div class="row">
+        <div class="field"><label for="pdfStyle">Style</label>
+          <select id="pdfStyle"><option value="th" selected>Sharp (text, documents)</option><option value="fs">Dithered (photos)</option></select></div>
+        <label class="chk" style="align-self:center"><input type="checkbox" id="pdfTrim" checked> Trim white margins</label>
+      </div>
+    </div>
+    <div class="preview" id="pdfPrevWrap" hidden><canvas id="pdfPrev"></canvas></div>
+    <button class="pri wide" id="printPdf" disabled>Print PDF</button>
+    <p class="hint"><b>Reflow text</b> pulls the words out of the PDF and prints them at the size you choose, filling the full paper width, so it's as big and readable as possible. Use <b>Whole page</b> for PDFs with pictures, tables or scans. Needs internet the first time to load the PDF reader.</p>
+  </section>
+
+  <div class="card">
+    <button class="wide" id="printTest" disabled style="margin:0">Print test page</button>
+    <button class="pri wide" id="diag" disabled style="margin-top:10px">Run diagnosis (prints numbered samples)</button>
+    <p class="hint">Not printing right? Tap <b>Run diagnosis</b>, then in Settings → Image method pick the number of a sample that printed clearly.</p>
+    <button class="wide" id="lab" disabled style="margin-top:10px">Run printer lab (12 small probes)</button>
+    <p class="hint">Sends 12 tiny test commands one by one and logs what the printer answers. Afterwards open <b>Log</b>, copy everything and send it back along with what physically printed.</p>
+    <div class="bar" id="bar"><i></i></div>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>Settings</summary>
+      <div class="row">
+        <div class="field"><label for="paper">Paper width</label>
+          <select id="paper"><option value="384">58 mm (384 dots)</option><option value="320">48 mm printable (320)</option><option value="576">80 mm (576 dots)</option></select></div>
+        <div class="field"><label for="feed">Blank lines after print</label>
+          <input type="number" id="feed" min="0" max="20" value="3"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="chunk">Bytes per Bluetooth write</label>
+          <select id="chunk"><option>20</option><option>64</option><option>100</option><option selected>180</option><option>512</option></select></div>
+        <div class="field"><label for="delay">Delay between writes (ms)</label>
+          <input type="number" id="delay" min="0" max="200" value="40"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="wmode">Write mode</label>
+          <select id="wmode"><option value="ack">Acknowledged (reliable)</option><option value="nores">Without response (fast)</option></select></div>
+        <div class="field"><label for="density">Print darkness (start command)</label>
+          <input type="number" id="density" min="0" max="50" value="25"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="protocol">Printer language</label>
+          <select id="protocol"><option value="escpos">ESC/POS (most printers)</option><option value="cat">Cat/YHK packets (0x51 0x78)</option></select></div>
+        <label class="chk" style="align-self:center"><input type="checkbox" id="mirror"> Mirror (cat mode, if text is reversed)</label>
+      </div>
+      <div class="row">
+        <div class="field"><label for="imgMethod">Image method (use Run diagnosis to find yours)</label>
+          <select id="imgMethod"><option value="gsv1" selected>5 · GS v 0 (one row per command)</option><option value="gsv">1 · GS v 0 (single block)</option><option value="gsvb">2 · GS v 0 (24-row bands)</option><option value="esc24">3 · ESC * 24-dot</option><option value="esc8">4 · ESC * 8-dot</option></select></div>
+      </div>
+      <div class="row" style="margin-bottom:8px">
+        <label class="chk"><input type="checkbox" id="startCmd"> Send YHK start/density command</label>
+        <label class="chk"><input type="checkbox" id="rotate"> Rotate 180° (if output is upside down)</label>
+      </div>
+      <p class="hint">If the print is garbled, cut off at the bottom, or has white bands, adjust the delay (try 50–60 if the bottom is missing, lower it if you see white bands). The page automatically shrinks the write size if the printer rejects it.</p>
+    </details>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>Log</summary>
+      <pre id="log"></pre>
+    </details>
+  </div>
+</div>
+<div id="toast" role="status"></div>
+
+<script>
+(() => {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const ESC = 0x1b, GS = 0x1d;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------- storage (best effort) ---------- */
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('thermal4_' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('thermal4_' + k, JSON.stringify(v)); } catch {} }
+};
+
+/* ---------- ui helpers ---------- */
+let toastTimer;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+function log(msg, cls) {
+  const pre = $('#log'); const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = new Date().toLocaleTimeString() + '  ' + msg;
+  pre.appendChild(line); pre.scrollTop = pre.scrollHeight;
+}
+const paperDots = () => Math.max(64, Math.floor((+$('#paper').value || 384) / 8) * 8);
+const feedLines = () => Math.min(20, Math.max(0, +$('#feed').value || 0));
+const FLUSH_MS = 1500; // let the printer finish its buffer before we call it done
+
+/* ---------- settings persistence ---------- */
+['paper', 'feed', 'chunk', 'delay', 'wmode', 'density', 'imgMethod', 'protocol'].forEach(id => {
+  const el = $('#' + id); const v = store.get(id, null);
+  if (v !== null) el.value = v;
+  el.addEventListener('change', () => { store.set(id, el.value); updatePreviews(); });
+});
+['startCmd', 'rotate', 'mirror'].forEach(id => {
+  const el = $('#' + id); const v = store.get(id, null);
+  if (v !== null) el.checked = v;
+  el.addEventListener('change', () => { store.set(id, el.checked); updatePreviews(); });
+});
+
+/* ---------- transport ---------- */
+let transport = null;
+let busy = false;
+let chunkSize = +$('#chunk').value;
+$('#chunk').addEventListener('change', () => chunkSize = +$('#chunk').value);
+
+const SERVICE_16 = [0x18f0, 0xff00, 0xffe0, 0xfee7, 0xae30, 0xae00, 0xfff0, 0xffb0, 0xffc0, 0xff10, 0xfe00];
+const u16 = n => `0000${n.toString(16).padStart(4, '0')}-0000-1000-8000-00805f9b34fb`;
+const SERVICES = [...SERVICE_16.map(u16), '49535343-fe7d-4ae5-8fa9-9fafd205e455', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2'];
+const YHK_TX = '49535343-8841-43f4-a8d4-ecbe34729bb3'; // ISSC UART TX used by YHK printers
+
+function setConn(label) {
+  const on = !!label;
+  $('#status').classList.toggle('on', on);
+  $('#status .t').textContent = on ? label : 'Not connected';
+  $('#btnDisc').hidden = !on;
+  $('#btnBt').hidden = on;
+  refreshButtons();
+}
+function refreshButtons() {
+  const ok = !!transport && !busy;
+  ['printText', 'printImage', 'printQr', 'printPdf', 'printTest', 'diag', 'lab'].forEach(id => {
+    $('#' + id).disabled = !ok || (id === 'printImage' && !imgCanvas) || (id === 'printPdf' && !pdfDoc);
+  });
+}
+
+async function connectBluetooth() {
+  if (!navigator.bluetooth) { $('#unsupported').hidden = false; toast('Web Bluetooth not supported here'); return; }
+  try {
+    log('Scanning…');
+    const dev = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: SERVICES });
+    log('Selected: ' + (dev.name || dev.id));
+    dev.addEventListener('gattserverdisconnected', () => { transport = null; setConn(null); log('Printer disconnected'); toast('Printer disconnected'); });
+    const server = await dev.gatt.connect();
+    const services = await server.getPrimaryServices();
+    let best = null;
+    for (const s of services) {
+      log('Service ' + s.uuid);
+      if (/^0000180[01]-/.test(s.uuid)) continue;
+      let chars = [];
+      try { chars = await s.getCharacteristics(); } catch { continue; }
+      for (const c of chars) {
+        const p = c.properties;
+        log('  char ' + c.uuid + ' [' + ['write', 'writeWithoutResponse', 'notify'].filter(k => p[k]).join(',') + ']');
+        if (!p.write && !p.writeWithoutResponse) continue;
+        const score = (c.uuid === YHK_TX ? 100 : 0) + (SERVICES.includes(s.uuid) ? 10 : 0) + (p.write ? 2 : 0) + (p.writeWithoutResponse ? 1 : 0);
+        if (!best || score > best.score) best = { score, c };
+      }
+    }
+    if (!best) { dev.gatt.disconnect(); throw new Error('No writable characteristic found. The printer may use classic Bluetooth only.'); }
+    const c = best.c;
+    log('Using characteristic ' + c.uuid + ' (service ' + c.service.uuid + ')');
+    if (/^0000ae30-/.test(c.service.uuid) && $('#protocol').value !== 'cat') {
+      $('#protocol').value = 'cat'; store.set('protocol', 'cat');
+      log('This looks like a cat-style printer (service AE30), switched to Cat/YHK packets');
+      toast('Switched to Cat/YHK printer language');
+    }
+    // Listen to anything the printer says back (status / errors) and show it in the log
+    try {
+      const sib = (await c.service.getCharacteristics()).find(x => x.properties.notify);
+      if (sib) {
+        await sib.startNotifications();
+        sib.addEventListener('characteristicvaluechanged', e => {
+          const v = new Uint8Array(e.target.value.buffer);
+          log('Printer says: ' + [...v].map(b => b.toString(16).padStart(2, '0')).join(' ') + '   "' + [...v].map(b => b >= 32 && b < 127 ? String.fromCharCode(b) : '·').join('') + '"');
+        });
+        log('Listening on ' + sib.uuid);
+      }
+    } catch (err) { log('No notifications: ' + err.message); }
+    transport = {
+      async write(bytes) {
+        const p = c.properties, wantAck = $('#wmode').value === 'ack';
+        const useAck = p.write && (wantAck || !p.writeWithoutResponse);
+        if (useAck) return c.writeValueWithResponse ? 
